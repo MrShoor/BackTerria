@@ -114,7 +114,7 @@
         <PackageName Value="LCL"/>
       </Item2>
     </RequiredPackages>
-    <Units Count="2">
+    <Units Count="3">
       <Unit0>
         <Filename Value="Game.lpr"/>
         <IsPartOfProject Value="True"/>
@@ -126,6 +126,11 @@
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
       </Unit1>
+      <Unit2>
+        <Filename Value="gmainmenu.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="gMainMenu"/>
+      </Unit2>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

@@ -11,15 +11,23 @@
         <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
     </CompilerOptions>
-    <Files Count="2">
+    <Files Count="4">
       <Item1>
         <Filename Value="bworld.pas"/>
-        <UnitName Value="bworld"/>
+        <UnitName Value="bWorld"/>
       </Item1>
       <Item2>
         <Filename Value="btypes.pas"/>
-        <UnitName Value="btypes"/>
+        <UnitName Value="bTypes"/>
       </Item2>
+      <Item3>
+        <Filename Value="blevel.pas"/>
+        <UnitName Value="bLevel"/>
+      </Item3>
+      <Item4>
+        <Filename Value="bwork.pas"/>
+        <UnitName Value="bwork"/>
+      </Item4>
     </Files>
     <RequiredPkgs Count="2">
       <Item1>

@@ -13,28 +13,24 @@ uses
   AppEvnts,
   {$EndIf}
   Classes, SysUtils, Forms, Controls, Graphics, Dialogs,
+  bWork,
   avRes, avTypes, avTess, mutils;
 
 type
   { TfrmMain }
 
   TfrmMain = class(TForm)
-    {$IfDef DCC}
-    ApplicationEvents: TApplicationEvents;
-    {$EndIf}
-    {$IfDef FPC}
-    ApplicationProperties: TApplicationProperties;
-    {$EndIf}
-    procedure ApplicationPropertiesIdle(Sender: TObject; var Done: Boolean);
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormPaint(Sender: TObject);
   private
     FMain: TavMainRender;
-    FFrameBuffer: TavFrameBuffer;
+    FWork: TbWork;
 
     FFPSCounter: Integer;
     FFPSMeasureTime: Integer;
+
+    procedure Idle(Sender: TObject; var Done: Boolean);
   public
     {$IfDef FPC}
     procedure EraseBackground(DC: HDC); override;
@@ -42,7 +38,6 @@ type
     {$IfDef DCC}
     procedure WMEraseBkgnd(var Message: TWmEraseBkgnd); message WM_ERASEBKGND;
     {$EndIf}
-    procedure RenderScene;
   end;
 
 var
@@ -67,18 +62,12 @@ begin
   FMain := TavMainRender.Create(Nil);
   FMain.Window := Handle;
   FMain.Init3D(apiDX11);
-  FMain.Camera.Eye := Vec(-1.6, 1.4,-2.0);
-  FMain.Projection.FarPlane := 10.0;
-  FMain.Projection.NearPlane := 0.1;
 
-  FFrameBuffer := Create_FrameBufferMultiSampled(FMain, [TTextureFormat.RGBA, TTextureFormat.D32f], 8, [true, false]);
-  //FFrameBuffer := Create_FrameBuffer(FMain, [TTextureFormat.RGBA, TTextureFormat.D32f], [true, false]);
-end;
+  FWork := TbWork.Create(FMain);
 
-procedure TfrmMain.ApplicationPropertiesIdle(Sender: TObject; var Done: Boolean);
-begin
-  if FMain <> nil then FMain.InvalidateWindow;
-  Done := False;
+  FMain.UpdateStatesInterval := 8;
+
+  Application.OnIdle := {$IfDef FPC}@{$EndIf}Idle;
 end;
 
 procedure TfrmMain.FormDestroy(Sender: TObject);
@@ -87,8 +76,33 @@ begin
 end;
 
 procedure TfrmMain.FormPaint(Sender: TObject);
+
+  procedure UpdateFPS;
+  var measureTime: Int64;
+  begin
+    measureTime := FMain.Time64 div 100;
+    if measureTime > FFPSMeasureTime then
+    begin
+      FFPSMeasureTime := measureTime;
+      FFPSCounter := 0;
+    end
+    else
+      Inc(FFPSCounter);
+  end;
+
 begin
-  RenderScene;
+  if FMain = nil then Exit;
+  if FWork = nil then Exit;
+
+  UpdateFPS;
+
+  FWork.Render;
+end;
+
+procedure TfrmMain.Idle(Sender: TObject; var Done: Boolean);
+begin
+  FMain.InvalidateWindow;
+  Done := False;
 end;
 
 {$IfDef FPC}
@@ -103,42 +117,6 @@ begin
   Message.Result := 1;
 end;
 {$EndIf}
-
-procedure TfrmMain.RenderScene;
-  procedure UpdateFPS;
-  var measureTime: Int64;
-  begin
-    measureTime := FMain.Time64 div 100;
-    if measureTime > FFPSMeasureTime then
-    begin
-      FFPSMeasureTime := measureTime;
-      FFPSCounter := 0;
-    end
-    else
-      Inc(FFPSCounter);
-  end;
-
-var dt, tn: Single;
-begin
-  if FMain = nil then Exit;
-
-  UpdateFPS;
-
-  if FMain.Bind then
-  try
-    FMain.States.DepthTest := True;
-
-    FFrameBuffer.FrameRect := RectI(0, 0, ClientWidth, ClientHeight);
-    FFrameBuffer.Select;
-
-    FMain.Clear(Vec(0.0,0.2,0.4,1.0), True, FMain.Projection.DepthRange.y, True);
-
-    FFrameBuffer.BlitToWindow;
-    FMain.Present;
-  finally
-    FMain.Unbind;
-  end;
-end;
 
 end.
 

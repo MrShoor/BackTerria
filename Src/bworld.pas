@@ -20,7 +20,7 @@ type
 
   { TbGameObject }
 
-  TbGameObject = class (TWeakedObject)
+  TbGameObject = class (TavMainRenderChild)
   private
     FBBox: TAABB;
 
@@ -51,7 +51,7 @@ type
     function Transform(): TMat4;
     function TransformInv(): TMat4;
 
-    constructor Create(const AWorld: TbWorld); virtual;
+    constructor Create(const AWorld: TbWorld); virtual; overload;
     destructor Destroy; override;
   end;
   TbGameObjArr = {$IfDef FPC}specialize{$EndIf}TArray<TbGameObject>;
@@ -62,7 +62,7 @@ type
 
   { TbWorld }
 
-  TbWorld = class (TWeakedObject)
+  TbWorld = class (TavMainRenderChild)
   private
     FObjects   : IbGameObjSet;
     FToDestroy : IbGameObjSet;
@@ -71,6 +71,8 @@ type
 
     FTimeTick: Int64;
   public
+    property GameTime: Int64 read FTimeTick;
+
     procedure UpdateStep();
     procedure SafeDestroy(const AObj: TbGameObject);
     procedure ProcessToDestroy;

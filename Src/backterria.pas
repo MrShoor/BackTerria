@@ -8,7 +8,7 @@ unit BackTerria;
 interface
 
 uses
-  bWorld, bTypes, LazarusPackageIntf;
+  bWorld, bTypes, bLevel, bWork, LazarusPackageIntf;
 
 implementation
 

@@ -16,9 +16,4 @@ object frmMain: TfrmMain
   OnPaint = FormPaint
   PixelsPerInch = 96
   TextHeight = 13
-  object ApplicationEvents: TApplicationEvents
-    OnIdle = ApplicationPropertiesIdle
-    Left = 80
-    Top = 24
-  end
 end
