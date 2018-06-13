@@ -25,6 +25,7 @@ type
     FBBox: TAABB;
 
     FPos: TVec3;
+    FResource: TbRenderResources;
     FRot: TQuat;
     FScale: Single;
     FTransformValid: Boolean;
@@ -42,7 +43,11 @@ type
     procedure SubscribeForUpdateStep;
     procedure UnSubscribeFromUpdateStep;
     procedure UpdateStep; virtual;
+
+    procedure SetResource(const AValue: TbRenderResources); virtual;
   public
+    property Resource: TbRenderResources read FResource write SetResource;
+
     property Pos  : TVec3  read FPos   write SetPos;
     property Rot  : TQuat  read FRot   write SetRot;
     property Scale: Single read FScale write SetScale;
@@ -76,6 +81,8 @@ type
     procedure UpdateStep();
     procedure SafeDestroy(const AObj: TbGameObject);
     procedure ProcessToDestroy;
+
+    procedure AfterConstruction; override;
   end;
 
 implementation
@@ -128,6 +135,11 @@ end;
 
 procedure TbGameObject.UpdateStep;
 begin
+end;
+
+procedure TbGameObject.SetResource(const AValue: TbRenderResources);
+begin
+  FResource := AValue;
 end;
 
 function TbGameObject.Transform: TMat4;
@@ -194,6 +206,15 @@ begin
   for i := 0 to FTempObjs.Count-1 do
     FTempObjs[i].Free;
   FToDestroy.Clear;
+end;
+
+procedure TbWorld.AfterConstruction;
+begin
+  inherited AfterConstruction;
+  FObjects    := TbGameObjSet.Create();
+  FToDestroy  := TbGameObjSet.Create();
+  FUpdateSubs := TbGameObjSet.Create();
+  FTempObjs   := TbGameObjArr.Create();
 end;
 
 end.

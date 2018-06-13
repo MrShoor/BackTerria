@@ -30,10 +30,21 @@ type
     light: TbLights;
   end;
 
+function ResourceModels(const ANames: array of string): TbRenderResources;
+
 implementation
 
 type
   EResourceError = class (Exception);
+
+function ResourceModels(const ANames: array of string): TbRenderResources;
+var
+  i: Integer;
+begin
+  SetLength(Result.model.names, Length(ANames));
+  for i := 0 to Length(ANames) - 1 do
+    Result.model.names[i] := ANames[i];
+end;
 
 { TbModels }
 

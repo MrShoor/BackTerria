@@ -8,7 +8,8 @@ interface
 
 uses
   Classes, SysUtils, bWorld, avRes, avTypes, mutils,
-  bLevel;
+  avContnrs, avModel, avMesh,
+  bLevel, bTypes;
 
 type
 
@@ -18,6 +19,13 @@ type
   private
     FWorld: TbWorld;
     FFrameBuffer: TavFrameBuffer;
+
+    FAllMeshes: IavMeshInstances;
+
+    FModelsProgram: TavProgram;
+    FModels: TavModelCollection;
+
+    FStatic: TbGameObject;
   protected
     property World: TbWorld read FWorld;
 
@@ -45,7 +53,7 @@ begin
     FFrameBuffer.FrameRect := RectI(Vec(0, 0), Main.WindowSize);
     FFrameBuffer.Select;
 
-    Main.Clear(Vec(Random,0.2,0.4,1.0), True, Main.Projection.DepthRange.y, True);
+    Main.Clear(Vec(0.0,0.2,0.4,1.0), True, Main.Projection.DepthRange.y, True);
 
 
 
@@ -57,9 +65,43 @@ begin
 end;
 
 procedure TbWork.AfterConstruction;
+
+  function PreloadMeshes(const AFileName: string): IavMeshInstances;
+  var name: string;
+      inst: IavMeshInstance;
+  begin
+    Result := LoadInstancesFromFile(AFileName);
+    Result.Reset;
+    while Result.Next(name, inst) do
+      FAllMeshes.Add(name, inst);
+  end;
+
+var
+  meshes: IavMeshInstances;
+  meshname: string;
+  names : array of string;
+  i: Integer;
 begin
   inherited AfterConstruction;
+
+  FAllMeshes := TavMeshInstances.Create();
+  FModels := TavModelCollection.Create(Self);
+
+  meshes := PreloadMeshes('assets\sponza\model.avm');
+  SetLength(names, meshes.Count);
+  i := 0;
+  meshes.Reset;
+  while meshes.NextKey(meshname) do
+  begin
+    names[i] := meshname;
+    Inc(i);
+  end;
+
   FWorld := TbWorld.Create(Self);
+
+  FStatic := TbGameObject.Create(FWorld);
+  FStatic.Resource := ResourceModels(names);
+
   FFrameBuffer := Create_FrameBufferMultiSampled(Main, [TTextureFormat.RGBA, TTextureFormat.D32f], 8, [true, false]);
 end;
 
