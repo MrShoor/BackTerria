@@ -11,7 +11,7 @@
         <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
     </CompilerOptions>
-    <Files Count="4">
+    <Files Count="5">
       <Item1>
         <Filename Value="bworld.pas"/>
         <UnitName Value="bWorld"/>
@@ -26,8 +26,12 @@
       </Item3>
       <Item4>
         <Filename Value="bwork.pas"/>
-        <UnitName Value="bwork"/>
+        <UnitName Value="bWork"/>
       </Item4>
+      <Item5>
+        <Filename Value="bfpvcamera.pas"/>
+        <UnitName Value="bfpvcamera"/>
+      </Item5>
     </Files>
     <RequiredPkgs Count="2">
       <Item1>

@@ -2,6 +2,7 @@
 #include "matrices.h"
 #include "lighting.h"
 #include "avModelMaterials.h"
+#include "utils.h"
 
 struct VS_Input {
     float3 vsCoord   : vsCoord;
@@ -71,13 +72,9 @@ VS_Output VS(VS_Input In) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-float3 UnpackNormal(float4 PackedNormal) {
-    float3 Out = (PackedNormal.xyz-0.5)*2.0;
-    return Out;
-}
-
 struct PS_Output {
     float4 Color : SV_Target0;
+    float4 Normal: SV_Target1;
 };
 
 static const float LightInt = 3;
@@ -87,11 +84,32 @@ PS_Output PS(VS_Output In) {
     In.vNorm = normalize(In.vNorm);
     
     ModelMaterialDesc m = LoadMaterialDesc((int)In.MatIndex);
+    
+    float3 norm = In.vNorm;
+    if (m.mapSpecular_Hardness_mapGeometry_Normal.w > 0.001) {
+        float3x3 tbn = CalcTBN(In.vCoord, In.vNorm, In.vTex);
+        norm = UnpackNormal(m.Geometry_Normal(In.vTex, float4(0.5,0.5,1,0)));
+        norm = mul(norm, tbn);    
+    }
+    
+    float4 diff = m.Diffuse_Color(In.vTex, m.Diff);
+    
+    Out.Color = PhongColor(-norm, normalize(In.vCoord), normalize(In.vCoord), 0.5, diff, 1.0, 0.001, 80.0);
+    Out.Normal = PackNormal(norm);
+    
+    return Out;
+}
+
+PS_Output PS_old(VS_Output In) {
+    PS_Output Out;
+    In.vNorm = normalize(In.vNorm);
+    
+    ModelMaterialDesc m = LoadMaterialDesc((int)In.MatIndex);
     float3 norm = In.vNorm;
     
     if (m.mapSpecular_Hardness_mapGeometry_Normal.w > 0.001) {
         float3x3 tbn = CalcTBN(In.vCoord, In.vNorm, In.vTex);
-        float3 norm = UnpackNormal(m.Geometry_Normal(In.vTex, float4(0.5,0.5,1,0)));
+        norm = UnpackNormal(m.Geometry_Normal(In.vTex, float4(0.5,0.5,1,0)));
         norm = mul(norm, tbn);
     }    
     
@@ -121,6 +139,8 @@ PS_Output PS(VS_Output In) {
     float3 c = CookTorrance_GGX_sampled(n, viewDir, F0, diff.xyz, roughness)*LightInt;
 
     Out.Color = float4(tonemapReinhard(c), diff.a);
+    
+    //Out.Color = diff;
     //Out.Color = -In.vNorm.z;
     return Out;
 }

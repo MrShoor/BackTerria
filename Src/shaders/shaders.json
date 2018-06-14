@@ -15,6 +15,12 @@
 	"Vertex"   : "avMesh.cpp",
 	"Fragment" : "avMesh.cpp",
 	"Path"     :["avMesh"]
+        },
+        {
+            "Name" : "PostProcess1",
+            "Vertex" : "post_process.cpp",
+            "Fragment" : "post_process.cpp",
+            "Path":["postprocess"]
         }
     ]
 }
