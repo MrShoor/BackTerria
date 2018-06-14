@@ -37,6 +37,11 @@ type
 
 implementation
 
+const
+  SHADERS_LOAD_FROMRES = False;
+  SHADERS_DIR = 'D:/Projects/BackTerria/Src/shaders/!Out';
+//{$R '../Src/Shaders/shaders.rc'}
+
 { TbWork }
 
 procedure TbWork.EMUps(var AMsg: TavMessage);
@@ -55,7 +60,11 @@ begin
 
     Main.Clear(Vec(0.0,0.2,0.4,1.0), True, Main.Projection.DepthRange.y, True);
 
+    FStatic.Resource.model.Update(IdentityMat4, FAllMeshes, FModels);
 
+    FModelsProgram.Select();
+    FModels.Select;
+    FModels.Draw(FStatic.Resource.model.handles);
 
     FFrameBuffer.BlitToWindow;
     Main.Present;
@@ -86,6 +95,8 @@ begin
 
   FAllMeshes := TavMeshInstances.Create();
   FModels := TavModelCollection.Create(Self);
+  FModelsProgram := TavProgram.Create(Self);
+  FModelsProgram.Load('avMesh', SHADERS_LOAD_FROMRES, SHADERS_DIR);
 
   meshes := PreloadMeshes('assets\sponza\model.avm');
   SetLength(names, meshes.Count);
