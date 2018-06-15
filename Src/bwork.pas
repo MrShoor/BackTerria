@@ -9,7 +9,7 @@ interface
 uses
   Windows,
   Classes, SysUtils, bWorld, avRes, avTypes, mutils,
-  avContnrs, avModel, avMesh,
+  avContnrs, avModel, avMesh, avTexLoader,
   bLevel, bTypes, bFPVCamera;
 
 type
@@ -34,7 +34,7 @@ type
 
     FLastXY: TVec2i;
 
-    FHammerslayPts: TVec4Arr;
+    FRandomTex: TavTexture;
   protected
     property World: TbWorld read FWorld;
 
@@ -140,10 +140,10 @@ begin
     FFrameBuffer.Select;
 
     FPostProcess.Select();
-    FPostProcess.SetUniform('uHammerslayPts', FHammerslayPts);
     FPostProcess.SetUniform('Color', FGBuffer.GetColor(0), Sampler_NoFilter);
     FPostProcess.SetUniform('Normals', FGBuffer.GetColor(1), Sampler_NoFilter);
     FPostProcess.SetUniform('Depth', FGBuffer.GetDepth, Sampler_Depth);
+    FPostProcess.SetUniform('RandomTex', FRandomTex, Sampler_Linear);
     FPostProcess.Draw(ptTriangleStrip, cmNone, False, 0, 0, 4);
 
     FFrameBuffer.BlitToWindow;
@@ -165,6 +165,23 @@ procedure TbWork.AfterConstruction;
       FAllMeshes.Add(name, inst);
   end;
 
+  function GetRandomTextureData: ITextureData;
+  const S = 4;
+  var mip: ITextureMip;
+      pv: PVec4;
+      i: Integer;
+      l: Single;
+  begin
+    Result := EmptyTexData(S, S, TTextureFormat.RGBA32f, false, True);
+    mip := Result.MipData(0, 0);
+    pv := PVec4(mip.Data);
+    for i := 0 to S * S - 1 do
+    begin
+      pv^ := Vec(Random(), Random(), Random(), 0);
+      Inc(pv);
+    end;
+  end;
+
 var
   meshes: IavMeshInstances;
   meshname: string;
@@ -173,7 +190,9 @@ var
 begin
   inherited AfterConstruction;
 
-  FHammerslayPts := GenerateHammersleyPts(32);
+  FRandomTex := TavTexture.Create(Self);
+  FRandomTex.TargetFormat := TTextureFormat.RGBA32f;
+  FRandomTex.TexData := GetRandomTextureData;
 
   FAllMeshes := TavMeshInstances.Create();
   FModels := TavModelCollection.Create(Self);
