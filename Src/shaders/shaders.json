@@ -7,8 +7,10 @@
     "OutDir" : "!Out",
     "VertexEntry" : "VS",
     "FragmentEntry" : "PS",
+    "ComputeEntry" : "CS",
     "VertexTarget" : "vs_4_0",
     "FragmentTarget" : "ps_4_0",
+    "ComputeTarget" : "cs_5_0",
     "Programs":[
         {
         "Name"     : "avMesh",
@@ -21,6 +23,11 @@
             "Vertex" : "post_process.cpp",
             "Fragment" : "post_process.cpp",
             "Path":["postprocess"]
+        },
+        {
+            "Name" : "RenderClusters",
+            "Compute" : "render_clusters.cpp",
+            "Path":["clustered"]
         }
     ]
 }

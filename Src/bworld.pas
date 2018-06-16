@@ -13,7 +13,17 @@ uses
   avRes,
   avContnrs,
   mutils,
-  bTypes;
+  bTypes,
+  bLights,
+  bPostProcess,
+  avBase,
+  avTypes,
+  avMesh,
+  avModel;
+
+const
+  SHADERS_FROMRES = False;
+  SHADERS_DIR = 'D:\Projects\BackTerria\Src\shaders\!Out';
 
 type
   TbWorld = class;
@@ -25,14 +35,12 @@ type
     FBBox: TAABB;
 
     FPos: TVec3;
-    FResource: TbRenderResources;
     FRot: TQuat;
     FScale: Single;
     FTransformValid: Boolean;
     FTransform: TMat4;
     FTransformInv: TMat4;
 
-    FWorld: TbWorld;
     procedure SetBBox(const AValue: TAABB);
     procedure SetPos(const AValue: TVec3);
     procedure SetRot(const AValue: TQuat);
@@ -43,10 +51,13 @@ type
     procedure SubscribeForUpdateStep;
     procedure UnSubscribeFromUpdateStep;
     procedure UpdateStep; virtual;
-
-    procedure SetResource(const AValue: TbRenderResources); virtual;
+  protected
+    FWorld: TbWorld;
+    function CanRegister(target: TavObject): boolean; override;
   public
-    property Resource: TbRenderResources read FResource write SetResource;
+    property World: TbWorld read FWorld;
+
+    procedure WriteModels(const ACollection: IavModelInstanceArr); virtual;
 
     property Pos  : TVec3  read FPos   write SetPos;
     property Rot  : TQuat  read FRot   write SetRot;
@@ -56,7 +67,7 @@ type
     function Transform(): TMat4;
     function TransformInv(): TMat4;
 
-    constructor Create(const AWorld: TbWorld); virtual; overload;
+    procedure AfterConstruction; override;
     destructor Destroy; override;
   end;
   TbGameObjArr = {$IfDef FPC}specialize{$EndIf}TArray<TbGameObject>;
@@ -64,6 +75,53 @@ type
   TbGameObjSet = {$IfDef FPC}specialize{$EndIf}THashSet<TbGameObject>;
   IbGameObjSet = {$IfDef FPC}specialize{$EndIf}IHashSet<TbGameObject>;
   TbGameObjClass = class of TbGameObject;
+
+  { TbStaticObject }
+
+  TbStaticObject = class (TbGameObject)
+  private
+  protected
+    FModels: IavModelInstanceArr;
+  public
+    procedure WriteModels(const ACollection: IavModelInstanceArr); override;
+    procedure AddModel(const AName: string);
+
+    procedure AfterConstruction; override;
+  end;
+
+  { TbWorldRenderer }
+
+  TbWorldRenderer = class (TavMainRenderChild)
+  private
+    FLightRenderer: TavLightRenderer;
+    FPostProcess: TavPostProcess;
+
+    FGBuffer: TavFrameBuffer;
+
+    FModelsProgram: TavProgram;
+    FModels: TavModelCollection;
+    FPrefabs: IavMeshInstances;
+  protected
+    FWorld: TbWorld;
+    property World: TbWorld read FWorld;
+    function CanRegister(target: TavObject): boolean; override;
+    procedure AfterRegister; override;
+  protected
+    FAllModels: IavModelInstanceArr;
+    FVisibleObjects: IbGameObjArr;
+    procedure UpdateVisibleObjects;
+    procedure UpdateAllModels;
+  public
+    procedure InvalidateShaders;
+
+    procedure PrepareToDraw;
+    procedure DrawWorld;
+
+    function CreatePointLight(): TavPointLight;
+    function CreateModelInstances(const ANames: array of string): IavModelInstanceArr;
+
+    procedure PreloadModels(const AFiles: array of string);
+  end;
 
   { TbWorld }
 
@@ -75,7 +133,15 @@ type
     FTempObjs  : IbGameObjArr;
 
     FTimeTick: Int64;
+
+    FRenderer : TbWorldRenderer;
   public
+    property Renderer: TbWorldRenderer read FRenderer;
+
+    function QueryObjects(const AViewProj: TMat4): IbGameObjArr; overload;
+    function QueryObjects(const ABox: TAABB): IbGameObjArr; overload;
+    function QueryObjects(const ARay: TLine): IbGameObjArr; overload;
+
     property GameTime: Int64 read FTimeTick;
 
     procedure UpdateStep();
@@ -86,6 +152,129 @@ type
   end;
 
 implementation
+
+{ TbStaticObject }
+
+procedure TbStaticObject.WriteModels(const ACollection: IavModelInstanceArr);
+begin
+  inherited WriteModels(ACollection);
+  ACollection.AddArray(FModels);
+end;
+
+procedure TbStaticObject.AddModel(const AName: string);
+begin
+  FModels.AddArray( World.Renderer.CreateModelInstances([AName]) );
+  FModels.Last.Mesh.Transform := IdentityMat4;
+end;
+
+procedure TbStaticObject.AfterConstruction;
+begin
+  inherited AfterConstruction;
+  FModels := TavModelInstanceArr.Create();
+end;
+
+{ TbWorldRenderer }
+
+function TbWorldRenderer.CanRegister(target: TavObject): boolean;
+begin
+  Result := inherited CanRegister(target);
+  if not Result then Exit;
+  FWorld := TbWorld(target.FindAtParents(TbWorld));
+  Result := Assigned(FWorld);
+end;
+
+procedure TbWorldRenderer.AfterRegister;
+begin
+  inherited AfterRegister;
+  FLightRenderer := TavLightRenderer.Create(Self);
+  FPostProcess := TavPostProcess.Create(Self);
+
+  FGBuffer := Create_FrameBuffer(Self, [TTextureFormat.RGBA, TTextureFormat.RGBA, TTextureFormat.D32f], [true, false, false]);
+
+  FModelsProgram := TavProgram.Create(Self);
+  FModelsProgram.Load('avMesh', SHADERS_FROMRES, SHADERS_DIR);
+  FModels := TavModelCollection.Create(Self);
+
+  FPrefabs := TavMeshInstances.Create();
+
+  FAllModels := TavModelInstanceArr.Create();
+  FVisibleObjects := TbGameObjArr.Create();
+end;
+
+procedure TbWorldRenderer.UpdateVisibleObjects;
+begin
+  FVisibleObjects := World.QueryObjects(Main.Camera.Matrix * Main.Projection.Matrix);
+end;
+
+procedure TbWorldRenderer.UpdateAllModels;
+var
+  i: Integer;
+begin
+  FAllModels.Clear();
+  for i := 0 to FVisibleObjects.Count - 1 do
+    FVisibleObjects[i].WriteModels(FAllModels);
+end;
+
+procedure TbWorldRenderer.InvalidateShaders;
+begin
+  FLightRenderer.InvalidateShaders;
+  FPostProcess.InvalidateShaders;
+  FModelsProgram.Invalidate;
+end;
+
+procedure TbWorldRenderer.PrepareToDraw;
+begin
+  UpdateVisibleObjects();
+  UpdateAllModels();
+end;
+
+procedure TbWorldRenderer.DrawWorld;
+begin
+  Main.States.DepthTest := True;
+
+  FGBuffer.FrameRect := RectI(Vec(0,0),Main.WindowSize);
+  FGBuffer.Select;
+  Main.Clear(Vec(0.0,0.2,0.4,1.0), True, Main.Projection.DepthRange.y, True);
+
+  FModelsProgram.Select();
+  FModels.Select();
+  FModels.Draw(FAllModels);
+
+  FPostProcess.DoPostProcess(FGBuffer.GetColor(0), FGBuffer.GetColor(1), FGBuffer.GetDepth);
+
+  FPostProcess.ResultFBO.BlitToWindow();
+end;
+
+function TbWorldRenderer.CreatePointLight: TavPointLight;
+begin
+  Result := FLightRenderer.AddPointLight();
+end;
+
+function TbWorldRenderer.CreateModelInstances(const ANames: array of string): IavModelInstanceArr;
+var
+  i: Integer;
+begin
+  Result := TavModelInstanceArr.Create();
+  Result.Capacity := Length(ANames);
+  for i := Low(ANames) to High(ANames) do
+    Result.Add( FModels.ObtainModel(FPrefabs[ANames[i]]) );
+end;
+
+procedure TbWorldRenderer.PreloadModels(const AFiles: array of string);
+var
+  i: Integer;
+  newPrefabs: IavMeshInstances;
+  inst_name: string;
+  inst: IavMeshInstance;
+begin
+  for i := Low(AFiles) to High(AFiles) do
+  begin
+    newPrefabs := LoadInstancesFromFile(AFiles[i]);
+    newPrefabs.Reset;
+    while newPrefabs.Next(inst_name, inst) do
+      FPrefabs.Add(inst_name, inst);
+  end;
+end;
 
 { TbGameObject }
 
@@ -137,9 +326,17 @@ procedure TbGameObject.UpdateStep;
 begin
 end;
 
-procedure TbGameObject.SetResource(const AValue: TbRenderResources);
+function TbGameObject.CanRegister(target: TavObject): boolean;
 begin
-  FResource := AValue;
+  Result := inherited CanRegister(target);
+  if not Result then Exit;
+  FWorld := TbWorld(target.FindAtParents(TbWorld));
+  Result := Assigned(FWorld);
+end;
+
+procedure TbGameObject.WriteModels(const ACollection: IavModelInstanceArr);
+begin
+
 end;
 
 function TbGameObject.Transform: TMat4;
@@ -154,15 +351,14 @@ begin
   Result := FTransformInv;
 end;
 
-constructor TbGameObject.Create(const AWorld: TbWorld);
+procedure TbGameObject.AfterConstruction;
 begin
+  inherited AfterConstruction;
   FScale := 1;
   FRot.v4 := Vec(0,0,0,1);
   FBBox := EmptyAABB;
 
-  FWorld := AWorld;
-  if FWorld <> nil then
-    FWorld.FObjects.Add(Self);
+  FWorld.FObjects.Add(Self);
 end;
 
 destructor TbGameObject.Destroy;
@@ -177,6 +373,30 @@ begin
 end;
 
 { TbWorld }
+
+function TbWorld.QueryObjects(const AViewProj: TMat4): IbGameObjArr;
+var obj: TbGameObject;
+begin
+  Result := TbGameObjArr.Create();
+  FObjects.Reset;
+  while FObjects.Next(obj) do
+    Result.Add(obj);
+end;
+
+function TbWorld.QueryObjects(const ABox: TAABB): IbGameObjArr;
+var obj: TbGameObject;
+begin
+  Result := TbGameObjArr.Create();
+  FObjects.Reset;
+  while FObjects.Next(obj) do
+    Result.Add(obj);
+end;
+
+function TbWorld.QueryObjects(const ARay: TLine): IbGameObjArr;
+begin
+  //todo
+  Assert(False);
+end;
 
 procedure TbWorld.UpdateStep;
 var
@@ -215,6 +435,8 @@ begin
   FToDestroy  := TbGameObjSet.Create();
   FUpdateSubs := TbGameObjSet.Create();
   FTempObjs   := TbGameObjArr.Create();
+
+  FRenderer := TbWorldRenderer.Create(Self);
 end;
 
 end.

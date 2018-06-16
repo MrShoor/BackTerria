@@ -10,7 +10,7 @@ uses
   Windows,
   Classes, SysUtils, bWorld, avRes, avTypes, mutils,
   avContnrs, avModel, avMesh, avTexLoader,
-  bLevel, bTypes, bFPVCamera;
+  bLevel, bTypes, bFPVCamera, bLights;
 
 type
 
@@ -19,22 +19,11 @@ type
   TbWork = class (TavMainRenderChild)
   private
     FWorld: TbWorld;
-    FGBuffer: TavFrameBuffer;
-    FFrameBuffer: TavFrameBuffer;
 
-    FPostProcess: TavProgram;
-
-    FAllMeshes: IavMeshInstances;
-
-    FModelsProgram: TavProgram;
-    FModels: TavModelCollection;
-
-    FStatic: TbGameObject;
+    FStatic: TbStaticObject;
     FFPVCamera: TbFPVCamera;
 
     FLastXY: TVec2i;
-
-    FRandomTex: TavTexture;
   protected
     property World: TbWorld read FWorld;
 
@@ -51,23 +40,6 @@ type
   end;
 
 implementation
-
-const
-  SHADERS_LOAD_FROMRES = False;
-  SHADERS_DIR = 'D:/Projects/BackTerria/Src/shaders/!Out';
-
-  Sampler_Depth : TSamplerInfo = (
-    MinFilter  : tfNearest;
-    MagFilter  : tfNearest;
-    MipFilter  : tfNone;
-    Anisotropy : 0;
-    Wrap_X     : twClamp;
-    Wrap_Y     : twClamp;
-    Wrap_Z     : twClamp;
-    Border     : (x: 1; y: 1; z: 1; w: 1);
-  );
-
-//{$R '../Src/Shaders/shaders.rc'}
 
 { TbWork }
 
@@ -108,45 +80,17 @@ end;
 procedure TbWork.EMUps(var AMsg: TavMessage);
 begin
   FWorld.UpdateStep;
-  if GetKeyState(Ord('R')) < 0 then
-  begin
-    FModelsProgram.Invalidate;
-    FPostProcess.Invalidate;
-  end;
+  if GetKeyState(Ord('R')) < 0 then FWorld.Renderer.InvalidateShaders;
   if GetKeyState(Ord('W')) < 0 then FFPVCamera.Pos := FFPVCamera.Pos + FFPVCamera.Dir * 0.1;
   if GetKeyState(Ord('S')) < 0 then FFPVCamera.Pos := FFPVCamera.Pos - FFPVCamera.Dir * 0.1;
-
 end;
 
 procedure TbWork.Render;
 begin
   if Main.Bind then
   try
-    Main.States.DepthTest := True;
-
-    FGBuffer.FrameRect := RectI(Vec(0, 0), Main.WindowSize);
-    FGBuffer.Select;
-
-    Main.Clear(Vec(0.0,0.2,0.4,1.0), True, Main.Projection.DepthRange.y, True);
-
-    FStatic.Resource.model.Update(IdentityMat4, FAllMeshes, FModels);
-
-    FModelsProgram.Select();
-    FModels.Select;
-    FModels.Draw(FStatic.Resource.model.handles);
-
-
-    FFrameBuffer.FrameRect := RectI(Vec(0, 0), Main.WindowSize);
-    FFrameBuffer.Select;
-
-    FPostProcess.Select();
-    FPostProcess.SetUniform('Color', FGBuffer.GetColor(0), Sampler_NoFilter);
-    FPostProcess.SetUniform('Normals', FGBuffer.GetColor(1), Sampler_NoFilter);
-    FPostProcess.SetUniform('Depth', FGBuffer.GetDepth, Sampler_Depth);
-    FPostProcess.SetUniform('RandomTex', FRandomTex, Sampler_Linear);
-    FPostProcess.Draw(ptTriangleStrip, cmNone, False, 0, 0, 4);
-
-    FFrameBuffer.BlitToWindow;
+    FWorld.Renderer.PrepareToDraw;
+    FWorld.Renderer.DrawWorld;
     Main.Present;
   finally
     Main.Unbind;
@@ -154,72 +98,22 @@ begin
 end;
 
 procedure TbWork.AfterConstruction;
-
-  function PreloadMeshes(const AFileName: string): IavMeshInstances;
-  var name: string;
-      inst: IavMeshInstance;
-  begin
-    Result := LoadInstancesFromFile(AFileName);
-    Result.Reset;
-    while Result.Next(name, inst) do
-      FAllMeshes.Add(name, inst);
-  end;
-
-  function GetRandomTextureData: ITextureData;
-  const S = 4;
-  var mip: ITextureMip;
-      pv: PVec4;
-      i: Integer;
-      l: Single;
-  begin
-    Result := EmptyTexData(S, S, TTextureFormat.RGBA32f, false, True);
-    mip := Result.MipData(0, 0);
-    pv := PVec4(mip.Data);
-    for i := 0 to S * S - 1 do
-    begin
-      pv^ := Vec(Random(), Random(), Random(), 0);
-      Inc(pv);
-    end;
-  end;
-
 var
-  meshes: IavMeshInstances;
-  meshname: string;
-  names : array of string;
   i: Integer;
 begin
   inherited AfterConstruction;
 
-  FRandomTex := TavTexture.Create(Self);
-  FRandomTex.TargetFormat := TTextureFormat.RGBA32f;
-  FRandomTex.TexData := GetRandomTextureData;
-
-  FAllMeshes := TavMeshInstances.Create();
-  FModels := TavModelCollection.Create(Self);
-  FModelsProgram := TavProgram.Create(Self);
-  FModelsProgram.Load('avMesh', SHADERS_LOAD_FROMRES, SHADERS_DIR);
-
-  FPostProcess := TavProgram.Create(Self);
-  FPostProcess.Load('PostProcess1', SHADERS_LOAD_FROMRES, SHADERS_DIR);
-
-  meshes := PreloadMeshes('assets\sponza\model.avm');
-  SetLength(names, meshes.Count);
-  i := 0;
-  meshes.Reset;
-  while meshes.NextKey(meshname) do
-  begin
-    names[i] := meshname;
-    Inc(i);
-  end;
-
   FWorld := TbWorld.Create(Self);
+  FWorld.Renderer.PreloadModels(['assets\sponza\model.avm']);
 
-  FStatic := TbGameObject.Create(FWorld);
-  FStatic.Resource := ResourceModels(names);
+  FStatic := TbStaticObject.Create(FWorld);
+  for i := 0 to 382 do
+    if i = 2 then
+      Continue
+    else
+      FStatic.AddModel('sponza_'+Format('%.2d', [i]));
 
   //FGBuffer := Create_FrameBufferMultiSampled(Main, [TTextureFormat.RGBA, TTextureFormat.D32f], 8, [true, false]);
-  FGBuffer := Create_FrameBuffer(Main, [TTextureFormat.RGBA, TTextureFormat.RGBA, TTextureFormat.D32f], [true, false, false]);
-  FFrameBuffer := Create_FrameBuffer(Main, [TTextureFormat.RGBA], [true]);
 
   Main.Projection.NearPlane := 1;
   Main.Projection.FarPlane := 10000;
