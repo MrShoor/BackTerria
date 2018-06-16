@@ -62,6 +62,8 @@ begin
   FMain := TavMainRender.Create(Nil);
   FMain.Window := Handle;
   FMain.Init3D(apiDX11);
+  FMain.Projection.DepthRange := Vec(1, 0);
+  FMain.States.DepthFunc := cfGreater;
 
   FWork := TbWork.Create(FMain);
 

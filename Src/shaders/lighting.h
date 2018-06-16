@@ -78,7 +78,7 @@ float3 CookTorrance_GGX(float3 n, float3 l, float3 v, float3 h, float3 F0, float
     return max(0.0, albedo*diffK*NL + specK);
 }
 
-#define MaxSamplesCount 1024
+#define MaxSamplesCount 32
 float uSamplesCount;
 float4 uHammersleyPts[MaxSamplesCount];
 TextureCube uRadiance; SamplerState uRadianceSampler;

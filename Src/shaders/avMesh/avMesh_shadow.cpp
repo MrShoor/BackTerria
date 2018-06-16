@@ -32,11 +32,13 @@ uint matCount;
 [maxvertexcount(3*6)]
 void GS( triangle VS_Output input[3], inout TriangleStream<GS_Output> OutputStream )
 {   
-    GS_Output Out;
+    [unroll]
     for( uint i=0; i<min(6, matCount); i++ )
     {
+        [unroll]
         for (uint j=0; j<3; j++)
         {
+            GS_Output Out;
             Out.Pos = mul(float4(input[j].Coord,1.0), viewProj[i]);
             Out.ArrayIdx = i;
             Out.vsTex = input[j].vsTex;
@@ -56,9 +58,9 @@ struct PS_Output {
 };
 
 void PS(GS_Output In) {
-    //ModelMaterialDesc m = LoadMaterialDesc((int)In.MatIndex);
-    //float4 diff = m.Diffuse_Color(In.vsTex, m.Diff);
-    //if (diff.a < 0.1) discard;
+    ModelMaterialDesc m = LoadMaterialDesc((int)In.MatIndex);
+    float4 diff = m.Diffuse_Color(In.vsTex, m.Diff);
+    if (diff.a < 0.1) discard;
     
 //    PS_Output Out;
 //    Out.Color = In.Pos.z;

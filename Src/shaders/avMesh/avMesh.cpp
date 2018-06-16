@@ -4,11 +4,13 @@
 #include "avModelMaterials.h"
 #include "utils.h"
 #include "avMesh_common.h"
+#include "clustered_lighting.h"
 
 struct VS_Output {
     float4 Pos       : SV_Position;
     float3 vCoord    : vCoord;
     float3 wCoord    : wCoord;
+    float4 pCoord    : pCoord;
     float3 vNorm     : vNorm;
     float2 vTex      : vTex;
     float  MatIndex  : MatIndex;
@@ -23,8 +25,8 @@ VS_Output VS(VS_Input In) {
     Out.vCoord = mul(float4(crd, 1.0), V_Matrix).xyz;
     Out.vNorm = mul(normalize(norm), (float3x3)V_Matrix);
     Out.vTex = In.vsTex;
-    //Out.Pos = mul(float4(Out.vCoord, 1.0), P_Matrix);
-    Out.Pos = mul(float4(crd, 1.0), VP_Matrix);
+    Out.pCoord = mul(float4(Out.wCoord, 1.0), VP_Matrix);
+    Out.Pos = Out.pCoord;
     Out.MatIndex = In.aiBoneMatOffset.y + In.vsMatIndex + 0.5;
     return Out;
 }
@@ -53,8 +55,12 @@ PS_Output PS(VS_Output In) {
     
     float4 diff = m.Diffuse_Color(In.vTex, m.Diff);
     
-    Out.Color = PhongColor(-norm, normalize(In.vCoord), normalize(In.vCoord), 0.5, diff, 1.0, 0.001, 80.0);
+    float4 pCrd = In.pCoord;
+    pCrd.xyz /= pCrd.w;    
+    //Out.Color = PhongColor(-norm, normalize(In.vCoord), normalize(In.vCoord), 0.5, diff, 1.0, 0.001, 80.0);
+    Out.Color = Clustered_Phong(pCrd.xyz, In.vCoord, In.wCoord, norm, normalize(In.vCoord), diff, 0.5, 0.001, 80.0);
     Out.Normal = PackNormal(norm);
+    //Out.Color.rgb = dot(norm, )
     
     return Out;
 }

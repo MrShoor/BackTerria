@@ -21,10 +21,11 @@ type
   TPointLightMatrices = packed record
     viewProj: array [0..5] of TMat4;
     procedure Init(const APos: TVec3; const ARad: Single; const ADepthRange: TVec2);
+    class function Layout(): IDataLayout; static;
   end;
   PPointLightMatrices = ^TPointLightMatrices;
   IPointLightMatricesArr = {$IfDef FPC}specialize{$EndIf} IArray<TPointLightMatrices>;
-  TPointLightMatricesArr = {$IfDef FPC}specialize{$EndIf} TArray<TPointLightMatrices>;
+  TPointLightMatricesArr = {$IfDef FPC}specialize{$EndIf} TVerticesRec<TPointLightMatrices>;
 
   { TLightData }
 
@@ -140,6 +141,8 @@ type
     FLightsHeadBuffer: TavTexture3D;
     FLightLinkedList : TavUAV;
 
+    FLightMatricesSB: TavSB;
+
     FCubes512: TavShadowTextures;
 
     FRenderCluster_Prog: TavProgram;
@@ -160,6 +163,7 @@ type
     function LightsHeadBuffer: TavTexture3D;
     function LightsLinkedList: TavUAV;
     function LightsList: TavSB;
+    function LightMatrices: TavSB;
 
     function Cubes512: TavShadowTextures;
 
@@ -301,7 +305,7 @@ begin
   SetViewMatrix(mView, APos, APos + Vec(-100, 0, 0), Vec(0, 1, 0)); //GL_TEXTURE_CUBE_MAP_NEGATIVE_X
   viewProj[1] := mView * mProj;
 
-  SetViewMatrix(mView, APos, APos + Vec(0,  100, 0), Vec(0, 0, 1)); //GL_TEXTURE_CUBE_MAP_POSITIVE_Y
+  SetViewMatrix(mView, APos, APos + Vec(0,  100, 0), Vec(0, 0, -1)); //GL_TEXTURE_CUBE_MAP_POSITIVE_Y
   viewProj[2] := mView * mProj;
   SetViewMatrix(mView, APos, APos + Vec(0, -100, 0), Vec(0, 0, 1)); //GL_TEXTURE_CUBE_MAP_NEGATIVE_Y
   viewProj[3] := mView * mProj;
@@ -310,6 +314,15 @@ begin
   viewProj[4] := mView * mProj;
   SetViewMatrix(mView, APos, APos + Vec(0, 0, -100), Vec(0, 1, 0)); //GL_TEXTURE_CUBE_MAP_NEGATIVE_Z
   viewProj[5] := mView * mProj;
+end;
+
+class function TPointLightMatrices.Layout: IDataLayout;
+begin
+  Result := LB.Add('MatRow0', ctFloat, 4)
+              .Add('MatRow1', ctFloat, 4)
+              .Add('MatRow2', ctFloat, 4)
+              .Add('MatRow3', ctFloat, 4)
+              .Finish();
 end;
 
 { TLightData }
@@ -417,13 +430,12 @@ begin
     end;
   end;
 
-  if FLightMatrices = nil then
-    FLightMatrices := TPointLightMatricesArr.Create();
   if  FLightMatrices.Count < FLightData.Count then
     FLightMatrices.SetSize(FLightData.Count);
   for i := 0 to FLightData.Count - 1 do
     PPointLightMatrices(FLightMatrices.PItem[i])^.Init(FLightData[i].PosRange.xyz, FLightData[i].PosRange.w, Main.Projection.DepthRange);
   FLightsBuffer.Invalidate;
+  FLightMatricesSB.Invalidate;
 end;
 
 procedure TavLightRenderer.BuildHeadBuffer;
@@ -515,6 +527,11 @@ begin
   Result := FLightsBuffer;
 end;
 
+function TavLightRenderer.LightMatrices: TavSB;
+begin
+  Result := FLightMatricesSB;
+end;
+
 function TavLightRenderer.Cubes512: TavShadowTextures;
 begin
   Result := FCubes512;
@@ -546,6 +563,11 @@ begin
   FRenderCluster_Prog.Load('Lighting_render_clusters', SHADERS_FROMRES, SHADERS_DIR);
 
   FCubes512 := TavShadowTextures.Create(Self, 512, 6);
+
+  FLightMatrices := TPointLightMatricesArr.Create();
+  FLightMatricesSB := TavSB.Create(Self);
+  FLightMatricesSB.Vertices := FLightMatrices as IVerticesData;
+  //FLightMatrices.Vertices :=
 
   //FRenderCluster_FBO := TavFrameBuffer.Create(Self);
   //FRenderCluster_FBO.SetUAV(0, FLightsHeadBuffer);

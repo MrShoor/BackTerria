@@ -257,6 +257,7 @@ begin
   FLightRenderer.InvalidateShaders;
   FPostProcess.InvalidateShaders;
   FModelsProgram.Invalidate;
+  FModelsShadowProgram.Invalidate;
 end;
 
 procedure TbWorldRenderer.PrepareToDraw;
@@ -266,8 +267,22 @@ begin
 end;
 
 procedure TbWorldRenderer.DrawWorld;
+const
+    Sampler_Cubes : TSamplerInfo = (
+      MinFilter  : tfLinear;
+      MagFilter  : tfLinear;
+      MipFilter  : tfLinear;
+      Anisotropy : 0;
+      Wrap_X     : twClamp;
+      Wrap_Y     : twClamp;
+      Wrap_Z     : twClamp;
+      Border     : (x: 0; y: 0; z: 0; w: 0);
+      Comparison : cfGreater;
+    );
 begin
   Main.States.DepthTest := True;
+
+  Main.States.CullMode := cmFront;
 
   FLightRenderer.Render(FShadowPassAdapter);
 
@@ -275,7 +290,18 @@ begin
   FGBuffer.Select;
   Main.Clear(Vec(0.0,0.2,0.4,1.0), True, Main.Projection.DepthRange.y, True);
 
+  Main.States.CullMode := cmBack;
+
   FModelsProgram.Select();
+  FModelsProgram.SetUniform('depthRange', Main.Projection.DepthRange);
+  FModelsProgram.SetUniform('planesNearFar', Vec(Main.Projection.NearPlane, Main.Projection.FarPlane));
+  FModelsProgram.SetUniform('lightCount', FLightRenderer.LightsCount*1.0);
+  FModelsProgram.SetUniform('light_list', FLightRenderer.LightsList);
+  FModelsProgram.SetUniform('light_headBufferSize', FLightRenderer.LightsHeadBuffer.Size*1.0);
+  FModelsProgram.SetUniform('light_headBuffer', FLightRenderer.LightsHeadBuffer, Sampler_NoFilter);
+  FModelsProgram.SetUniform('light_linkedList', FLightRenderer.LightsLinkedList);
+  FModelsProgram.SetUniform('ShadowCube512', FLightRenderer.Cubes512, Sampler_Cubes);
+  FModelsProgram.SetUniform('CubeMatrices', FLightRenderer.LightMatrices);
   FModels.Select();
   FModels.Draw(FAllModels);
 
