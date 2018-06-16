@@ -9,10 +9,19 @@ interface
 uses
   Windows,
   Classes, SysUtils, bWorld, avRes, avTypes, mutils,
-  avContnrs, avModel, avMesh, avTexLoader,
-  bLevel, bTypes, bFPVCamera, bLights;
+  avModel, avTexLoader, bFPVCamera, bLights;
 
 type
+
+  { TbLighter }
+
+  TbLighter = class (TbGameObject)
+  private
+    FLightSources: array of TavPointLight;
+  protected
+    procedure AfterRegister; override;
+  public
+  end;
 
   { TbWork }
 
@@ -20,7 +29,9 @@ type
   private
     FWorld: TbWorld;
 
-    FStatic: TbStaticObject;
+    FStatic : TbStaticObject;
+    FLighter: TbLighter;
+
     FFPVCamera: TbFPVCamera;
 
     FLastXY: TVec2i;
@@ -40,6 +51,20 @@ type
   end;
 
 implementation
+
+{ TbLighter }
+
+procedure TbLighter.AfterRegister;
+begin
+  inherited AfterRegister;
+  SetLength(FLightSources, 1);
+  FLightSources[0] := World.Renderer.CreatePointLight();
+  //FLightSources[0].Pos := Vec(14, 10, 0);
+  FLightSources[0].Pos := Vec(0, 0, 0);
+  FLightSources[0].Radius := 250;
+  FLightSources[0].Color := Vec(1,1,1);
+  FLightSources[0].CastShadows := True;
+end;
 
 { TbWork }
 
@@ -98,22 +123,29 @@ begin
 end;
 
 procedure TbWork.AfterConstruction;
-var
-  i: Integer;
+//var
+//  i: Integer;
+var mv, mp: TMat4;
+    mres: TMat4;
 begin
   inherited AfterConstruction;
 
   FWorld := TbWorld.Create(Self);
-  FWorld.Renderer.PreloadModels(['assets\sponza\model.avm']);
 
+  FWorld.Renderer.PreloadModels(['assets\sponza\mini.avm']);
   FStatic := TbStaticObject.Create(FWorld);
-  for i := 0 to 382 do
-    if i = 2 then
-      Continue
-    else
-      FStatic.AddModel('sponza_'+Format('%.2d', [i]));
+  FStatic.AddModel('Cube');
+  FStatic.AddModel('Arrow');
 
-  //FGBuffer := Create_FrameBufferMultiSampled(Main, [TTextureFormat.RGBA, TTextureFormat.D32f], 8, [true, false]);
+  //FWorld.Renderer.PreloadModels(['assets\sponza\model.avm']);
+  //FStatic := TbStaticObject.Create(FWorld);
+  //for i := 0 to 382 do
+  //  if i = 2 then
+  //    Continue
+  //  else
+  //    FStatic.AddModel('sponza_'+Format('%.2d', [i]));
+
+  FLighter := TbLighter.Create(FWorld);
 
   Main.Projection.NearPlane := 1;
   Main.Projection.FarPlane := 10000;
@@ -121,6 +153,17 @@ begin
   FFPVCamera := TbFPVCamera.Create(Self);
   FFPVCamera.Pos := Vec(-22, 5, 1);
   FFPVCamera.Yaw := 0.5*Pi;
+
+  FFPVCamera.Pos := Vec(0, 0, 0);
+  FFPVCamera.Yaw := FFPVCamera.Yaw + Pi;
+//  Main.Projection.Fov := 0.5 * Pi;
+//  Main.Projection.Aspect := 1;
+
+//  mv := Main.Camera.Matrix;
+//  mp := Main.Projection.Matrix;
+//  mres := mv * mp;
+//  AllocConsole;
+//  Write(ToStr(mres.Row[0]));
 end;
 
 end.

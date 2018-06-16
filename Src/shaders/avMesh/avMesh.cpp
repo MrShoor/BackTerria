@@ -3,69 +3,28 @@
 #include "lighting.h"
 #include "avModelMaterials.h"
 #include "utils.h"
-
-struct VS_Input {
-    float3 vsCoord   : vsCoord;
-    float3 vsNormal  : vsNormal;
-    float2 vsTex     : vsTex;
-    float  vsMatIndex: vsMatIndex;
-    float4 vsWIndex  : vsWIndex;
-    float4 vsWeight  : vsWeight;
-    float2 aiBoneMatOffset: aiBoneMatOffset;
-};
+#include "avMesh_common.h"
 
 struct VS_Output {
     float4 Pos       : SV_Position;
     float3 vCoord    : vCoord;
+    float3 wCoord    : wCoord;
     float3 vNorm     : vNorm;
     float2 vTex      : vTex;
     float  MatIndex  : MatIndex;
 };
-
-Texture2D BoneTransform; SamplerState BoneTransformSampler;
-
-float4x4 GetBoneTransform(in float BoneCoord) {
-    float2 TexSize;
-    BoneTransform.GetDimensions(TexSize.x, TexSize.y);
-    float2 PixSize = 1.0 / TexSize;
-    
-    float2 TexCoord;
-    TexCoord.x = frac(BoneCoord / TexSize.x);
-    TexCoord.y = trunc(BoneCoord / TexSize.x) / TexSize.y;
-    TexCoord += 0.5 * PixSize;
-    
-    float4x4 m;
-    m[0] = BoneTransform.SampleLevel(BoneTransformSampler, float2(TexCoord.x,                 TexCoord.y), 0);
-    m[1] = BoneTransform.SampleLevel(BoneTransformSampler, float2(TexCoord.x +     PixSize.x, TexCoord.y), 0);
-    m[2] = BoneTransform.SampleLevel(BoneTransformSampler, float2(TexCoord.x + 2.0*PixSize.x, TexCoord.y), 0);
-    m[3] = BoneTransform.SampleLevel(BoneTransformSampler, float2(TexCoord.x + 3.0*PixSize.x, TexCoord.y), 0);
-    return m;
-}
-
-float4x4 GetBoneTransform(in float4 Indices, in float4 Weights) {
-    float4x4 m = {
-        1, 0, 0, 0,
-        0, 1, 0, 0,
-        0, 0, 1, 0,
-        0, 0, 0, 1
-    };
-    float4 ind = Indices*4.0;
-    if (Indices.x>=0.0) m  = GetBoneTransform(ind.x)*Weights.x;
-    if (Indices.y>=0.0) m += GetBoneTransform(ind.y)*Weights.y;
-    if (Indices.z>=0.0) m += GetBoneTransform(ind.z)*Weights.z;
-    if (Indices.w>=0.0) m += GetBoneTransform(ind.w)*Weights.w;
-    return m;
-}
 
 VS_Output VS(VS_Input In) {
     VS_Output Out;
     float4x4 mBone = GetBoneTransform(In.vsWIndex+In.aiBoneMatOffset.x, In.vsWeight);
     float3 crd = mul(float4(In.vsCoord, 1.0), mBone).xyz;
     float3 norm = mul( In.vsNormal, (float3x3) mBone );
+    Out.wCoord = crd;
     Out.vCoord = mul(float4(crd, 1.0), V_Matrix).xyz;
     Out.vNorm = mul(normalize(norm), (float3x3)V_Matrix);
     Out.vTex = In.vsTex;
-    Out.Pos = mul(float4(Out.vCoord, 1.0), P_Matrix);
+    //Out.Pos = mul(float4(Out.vCoord, 1.0), P_Matrix);
+    Out.Pos = mul(float4(crd, 1.0), VP_Matrix);
     Out.MatIndex = In.aiBoneMatOffset.y + In.vsMatIndex + 0.5;
     return Out;
 }

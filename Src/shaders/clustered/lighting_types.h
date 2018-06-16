@@ -11,6 +11,7 @@
 struct Light {
     float4 PosRange;
     float3 Color;
+    float3 ShadowSizeSliceRange;
 };
 
 struct ListNode {

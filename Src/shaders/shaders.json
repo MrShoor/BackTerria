@@ -6,10 +6,12 @@
     "OGLTranslate" : false,
     "OutDir" : "!Out",
     "VertexEntry" : "VS",
+    "GeometryEntry" : "GS",
     "FragmentEntry" : "PS",
     "ComputeEntry" : "CS",
-    "VertexTarget" : "vs_4_0",
-    "FragmentTarget" : "ps_4_0",
+    "VertexTarget" : "vs_5_0",
+    "FragmentTarget" : "ps_5_0",
+    "GeometryTarget" : "gs_5_0",
     "ComputeTarget" : "cs_5_0",
     "Programs":[
         {
@@ -19,13 +21,20 @@
 	"Path"     :["avMesh"]
         },
         {
+        "Name"     : "avMesh_shadow",
+	"Vertex"   : "avMesh_shadow.cpp",
+        "Geometry" : "avMesh_shadow.cpp",
+	"Fragment" : "avMesh_shadow.cpp",
+	"Path"     :["avMesh"]
+        },        
+        {
             "Name" : "PostProcess1",
             "Vertex" : "post_process.cpp",
             "Fragment" : "post_process.cpp",
             "Path":["postprocess"]
         },
         {
-            "Name" : "RenderClusters",
+            "Name" : "Lighting_render_clusters",
             "Compute" : "render_clusters.cpp",
             "Path":["clustered"]
         }

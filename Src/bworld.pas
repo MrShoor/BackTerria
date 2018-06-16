@@ -92,13 +92,24 @@ type
   { TbWorldRenderer }
 
   TbWorldRenderer = class (TavMainRenderChild)
+  private type
+    TShadowPassAdapter = class(TInterfacedObject, IGeometryRenderer)
+    private
+      FOwner: TbWorldRenderer;
+      procedure ShadowPassGeometry(const ALight: TLightData; const APointLightMatrices: TPointLightMatrices);
+      procedure DrawTransparentGeometry();
+    public
+      constructor Create(AOwner: TbWorldRenderer);
+    end;
   private
     FLightRenderer: TavLightRenderer;
+    FShadowPassAdapter: IGeometryRenderer;
     FPostProcess: TavPostProcess;
 
     FGBuffer: TavFrameBuffer;
 
     FModelsProgram: TavProgram;
+    FModelsShadowProgram: TavProgram;
     FModels: TavModelCollection;
     FPrefabs: IavMeshInstances;
   protected
@@ -153,6 +164,28 @@ type
 
 implementation
 
+{ TbWorldRenderer.TShadowPassAdapter }
+
+procedure TbWorldRenderer.TShadowPassAdapter.ShadowPassGeometry(
+  const ALight: TLightData; const APointLightMatrices: TPointLightMatrices);
+begin
+  FOwner.FModelsShadowProgram.Select;
+  FOwner.FModelsShadowProgram.SetUniform('matCount', 6);
+  FOwner.FModelsShadowProgram.SetUniform('viewProj', @APointLightMatrices.viewProj[0], 6);
+  FOwner.FModels.Select;
+  FOwner.FModels.Draw(FOwner.FAllModels);
+end;
+
+procedure TbWorldRenderer.TShadowPassAdapter.DrawTransparentGeometry;
+begin
+
+end;
+
+constructor TbWorldRenderer.TShadowPassAdapter.Create(AOwner: TbWorldRenderer);
+begin
+  FOwner := AOwner;
+end;
+
 { TbStaticObject }
 
 procedure TbStaticObject.WriteModels(const ACollection: IavModelInstanceArr);
@@ -187,12 +220,16 @@ procedure TbWorldRenderer.AfterRegister;
 begin
   inherited AfterRegister;
   FLightRenderer := TavLightRenderer.Create(Self);
+  FShadowPassAdapter := TShadowPassAdapter.Create(Self);
+
   FPostProcess := TavPostProcess.Create(Self);
 
   FGBuffer := Create_FrameBuffer(Self, [TTextureFormat.RGBA, TTextureFormat.RGBA, TTextureFormat.D32f], [true, false, false]);
 
   FModelsProgram := TavProgram.Create(Self);
   FModelsProgram.Load('avMesh', SHADERS_FROMRES, SHADERS_DIR);
+  FModelsShadowProgram := TavProgram.Create(Self);
+  FModelsShadowProgram.Load('avMesh_shadow', SHADERS_FROMRES, SHADERS_DIR);
   FModels := TavModelCollection.Create(Self);
 
   FPrefabs := TavMeshInstances.Create();
@@ -231,6 +268,8 @@ end;
 procedure TbWorldRenderer.DrawWorld;
 begin
   Main.States.DepthTest := True;
+
+  FLightRenderer.Render(FShadowPassAdapter);
 
   FGBuffer.FrameRect := RectI(Vec(0,0),Main.WindowSize);
   FGBuffer.Select;
@@ -396,6 +435,7 @@ function TbWorld.QueryObjects(const ARay: TLine): IbGameObjArr;
 begin
   //todo
   Assert(False);
+  Result := nil;
 end;
 
 procedure TbWorld.UpdateStep;
