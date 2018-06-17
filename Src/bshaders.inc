@@ -1,4 +1,4 @@
-//{$Define LOADFROMRES}
+{$Define LOADFROMRES}
 
 const
 {$IfnDef LOADFROMRES}

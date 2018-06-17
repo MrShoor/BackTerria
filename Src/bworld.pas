@@ -644,6 +644,7 @@ begin
   FUIObjects  := TbGameObjSet.Create();
 
   FRenderer := TbWorldRenderer.Create(Self);
+  FSndPlayer:= GetLightPlayer;
 end;
 
 end.
