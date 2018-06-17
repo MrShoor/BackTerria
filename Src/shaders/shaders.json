@@ -26,7 +26,13 @@
         "Geometry" : "avMesh_shadow.cpp",
 	"Fragment" : "avMesh_shadow.cpp",
 	"Path"     :["avMesh"]
-        },        
+        },
+        {
+        "Name"     : "avMesh_emission",
+	"Vertex"   : "avMesh_emission.cpp",
+	"Fragment" : "avMesh_emission.cpp",
+	"Path"     :["avMesh"]
+        }, 
         {
             "Name" : "PostProcess1",
             "Vertex" : "post_process.cpp",

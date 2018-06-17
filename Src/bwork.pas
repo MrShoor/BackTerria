@@ -9,7 +9,7 @@ interface
 uses
   Windows,
   Classes, SysUtils, bWorld, avRes, avTypes, mutils,
-  avModel, avTexLoader, bFPVCamera, bLights;
+  avModel, avTexLoader, bFPVCamera, bLights, bUtils;
 
 type
 
@@ -18,21 +18,34 @@ type
   TbLighter = class (TbGameObject)
   private
     FLightSources: array of TavPointLight;
+    FModelSphere: IavModelInstance;
   protected
+    procedure SetPos(const AValue: TVec3); override;
     procedure AfterRegister; override;
+
+    procedure WriteEmissive(const ACollection: IavModelInstanceArr); override;
   public
     destructor Destroy; override;
   end;
 
   { TbAnimatedLighter }
 
-  TbAnimatedLighter = class (TbGameObject)
+  TbAnimatedLighter = class (TbStaticObject)
   private
     FLight: TavPointLight;
+    FModelSphere: IavModelInstance;
     FRoute: array of TVec3;
-    FRoutePart: Integer;
-    FRoutePos : Single;
+    FRoutePos: TPathPos;
     FRouteSpeed: Single;
+
+    //FModels.AddArray( World.Renderer.CreateModelInstances([AName]) );
+    //FModels.Last.Mesh.Transform := IdentityMat4;
+
+  protected
+    procedure SetPos(const AValue: TVec3); override;
+    procedure UpdateStep; override;
+
+    procedure WriteEmissive(const ACollection: IavModelInstanceArr); override;
   protected
     procedure AfterRegister; override;
   end;
@@ -72,25 +85,59 @@ implementation
 procedure TbAnimatedLighter.AfterRegister;
 begin
   inherited AfterRegister;
-  Pos := Vec(4,4,4);
+  FLight := World.Renderer.CreatePointLight();
+  FLight.Radius := 30;
+  FLight.Color := Vec(1,1,1);
+  FLight.CastShadows := True;
 
-  SetLength(FRoute, 4);
+  SetLength(FRoute, 5);
   FRoute[0] := Vec(33.68775, 6.74312, -13.63531);
   FRoute[1] := Vec(-37.58761, 6.45068, -12.0576);
   FRoute[2] := Vec(-37.58761, 5.93924, 13.51868);
   FRoute[3] := Vec(35.11256, 6.84062, 13.53033);
+  FRoute[4] := FRoute[0];
 
-  FRoute[0] := Vec(7,7,7);
+//  FRoute[0] := Vec(7,7,7);
 
-  FRoutePart := 0;
-  FRoutePos := 0;
-  FRouteSpeed := 0.01;
+  Pos := FRoute[0];
 
-  FLight := World.Renderer.CreatePointLight();
-  FLight.Pos := Pos;
-  FLight.Radius := 100;
-  FLight.Color := Vec(1,1,1);
-  FLight.CastShadows := True;
+  FRoutePos.Idx := 0;
+  FRoutePos.Pos := 0;
+  FRouteSpeed := 0.1;
+
+  FModelSphere := World.Renderer.CreateModelInstances(['light_source']).Item[0];
+
+  SubscribeForUpdateStep;
+end;
+
+procedure TbAnimatedLighter.SetPos(const AValue: TVec3);
+begin
+  inherited;
+  if Assigned(FLight) then
+    FLight.Pos := Pos;
+  if Assigned(FModelSphere) then
+    FModelSphere.Mesh.Transform := Transform();
+end;
+
+procedure TbAnimatedLighter.UpdateStep;
+var pathDir: TVec3;
+    p: TVec3;
+    a: Single;
+begin
+  inherited UpdateStep;
+  p := TravelByPath(FRoute, FRouteSpeed, FRoutePos);
+  pathDir := FRoute[FRoutePos.Idx+1] - FRoute[FRoutePos.Idx];
+  pathDir := normalize( Quat(Vec(0,1,0), 0.5*Pi) * pathDir );
+
+  a := sin(FRoutePos.Pos * Pi)*3;
+  p := p + pathDir * a * sin(FRoutePos.Pos*15);
+
+  Pos := p;
+end;
+
+procedure TbAnimatedLighter.WriteEmissive(const ACollection: IavModelInstanceArr);
+begin
+  ACollection.Add(FModelSphere);
 end;
 
 { TbLighter }
@@ -100,11 +147,15 @@ begin
   inherited AfterRegister;
   SetLength(FLightSources, 1);
   FLightSources[0] := World.Renderer.CreatePointLight();
-  //FLightSources[0].Pos := Vec(14, 10, 0);
-  FLightSources[0].Pos := Vec(0, 0, 0);
+//  FLightSources[0].Pos := Vec(14, 10, 0);
+//  FLightSources[0].Pos := Vec(0, 0, 0);
   FLightSources[0].Radius := 230;
   FLightSources[0].Color := Vec(1,1,1);
   FLightSources[0].CastShadows := True;
+
+  Pos := Vec(14, 10, 0);
+
+  FModelSphere := World.Renderer.CreateModelInstances(['light_source']).Item[0];
 end;
 
 destructor TbLighter.Destroy;
@@ -114,6 +165,21 @@ begin
   for i := 0 to Length(FLightSources) - 1 do
     FreeAndNil(FLightSources[i]);
   inherited;
+end;
+
+procedure TbLighter.SetPos(const AValue: TVec3);
+var i: Integer;
+begin
+  inherited;
+  for i := 0 to Length(FLightSources) - 1 do
+    if Assigned(FLightSources[i]) then
+      FLightSources[i].Pos := Pos;
+end;
+
+procedure TbLighter.WriteEmissive(const ACollection: IavModelInstanceArr);
+begin
+  FModelSphere.Mesh.Transform := Transform();
+  ACollection.Add(FModelSphere);
 end;
 
 { TbWork }
@@ -188,18 +254,18 @@ begin
 
   FWorld := TbWorld.Create(Self);
 
-  FWorld.Renderer.PreloadModels(['assets\sponza\mini.avm']);
-  FStatic := TbStaticObject.Create(FWorld);
-  FStatic.AddModel('Cube');
-  FStatic.AddModel('Arrow');
+//  FWorld.Renderer.PreloadModels(['assets\sponza\mini.avm']);
+//  FStatic := TbStaticObject.Create(FWorld);
+//  FStatic.AddModel('Cube');
+//  FStatic.AddModel('Arrow');
 
-  //FWorld.Renderer.PreloadModels(['assets\sponza\model.avm']);
-  //FStatic := TbStaticObject.Create(FWorld);
-  //for i := 0 to 382 do
-  //  if i = 2 then
-  //    Continue
-  //  else
-  //    FStatic.AddModel('sponza_'+Format('%.2d', [i]));
+  FWorld.Renderer.PreloadModels(['assets\sponza\model.avm']);
+  FStatic := TbStaticObject.Create(FWorld);
+  for i := 0 to 382 do
+    if i = 2 then
+      Continue
+    else
+      FStatic.AddModel('sponza_'+Format('%.2d', [i]));
 
   FLighter := TbLighter.Create(FWorld);
 
@@ -212,8 +278,8 @@ begin
   FFPVCamera.Pos := Vec(-22, 5, 1);
   FFPVCamera.Yaw := 0.5*Pi;
 
-  FFPVCamera.Pos := Vec(0, 0, 0);
-  FFPVCamera.Yaw := FFPVCamera.Yaw + Pi;
+//  FFPVCamera.Pos := Vec(0, 0, 0);
+//  FFPVCamera.Yaw := FFPVCamera.Yaw + Pi;
 end;
 
 end.

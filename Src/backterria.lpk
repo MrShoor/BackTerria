@@ -11,7 +11,7 @@
         <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
     </CompilerOptions>
-    <Files Count="7">
+    <Files Count="8">
       <Item1>
         <Filename Value="bworld.pas"/>
         <UnitName Value="bWorld"/>
@@ -38,8 +38,12 @@
       </Item6>
       <Item7>
         <Filename Value="bpostprocess.pas"/>
-        <UnitName Value="bpostprocess"/>
+        <UnitName Value="bPostProcess"/>
       </Item7>
+      <Item8>
+        <Filename Value="butils.pas"/>
+        <UnitName Value="butils"/>
+      </Item8>
     </Files>
     <RequiredPkgs Count="2">
       <Item1>

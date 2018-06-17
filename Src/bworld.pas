@@ -40,13 +40,12 @@ type
     FTransformValid: Boolean;
     FTransform: TMat4;
     FTransformInv: TMat4;
-
-    procedure SetBBox(const AValue: TAABB);
-    procedure SetPos(const AValue: TVec3);
-    procedure SetRot(const AValue: TQuat);
-    procedure SetScale(const AValue: Single);
-
-    procedure ValidateTransform;
+  protected
+    procedure ValidateTransform; virtual;
+    procedure SetBBox(const AValue: TAABB); virtual;
+    procedure SetPos(const AValue: TVec3); virtual;
+    procedure SetRot(const AValue: TQuat); virtual;
+    procedure SetScale(const AValue: Single); virtual;
   protected
     procedure SubscribeForUpdateStep;
     procedure UnSubscribeFromUpdateStep;
@@ -58,6 +57,7 @@ type
     property World: TbWorld read FWorld;
 
     procedure WriteModels(const ACollection: IavModelInstanceArr); virtual;
+    procedure WriteEmissive(const ACollection: IavModelInstanceArr); virtual;
 
     property Pos  : TVec3  read FPos   write SetPos;
     property Rot  : TQuat  read FRot   write SetRot;
@@ -113,6 +113,7 @@ type
 
     FModelsProgram: TavProgram;
     FModelsShadowProgram: TavProgram;
+    FModelsEmissionProgram: TavProgram;
     FModels: TavModelCollection;
     FPrefabs: IavMeshInstances;
   protected
@@ -122,6 +123,7 @@ type
     procedure AfterRegister; override;
   protected
     FAllModels: IavModelInstanceArr;
+    FAllEmissives: IavModelInstanceArr;
     FVisibleObjects: IbGameObjArr;
     procedure UpdateVisibleObjects;
     procedure UpdateAllModels;
@@ -234,11 +236,14 @@ begin
   FModelsProgram.Load('avMesh', SHADERS_FROMRES, SHADERS_DIR);
   FModelsShadowProgram := TavProgram.Create(Self);
   FModelsShadowProgram.Load('avMesh_shadow', SHADERS_FROMRES, SHADERS_DIR);
+  FModelsEmissionProgram := TavProgram.Create(Self);
+  FModelsEmissionProgram.Load('avMesh_emission', SHADERS_FROMRES, SHADERS_DIR);
   FModels := TavModelCollection.Create(Self);
 
   FPrefabs := TavMeshInstances.Create();
 
   FAllModels := TavModelInstanceArr.Create();
+  FAllEmissives := TavModelInstanceArr.Create();
   FVisibleObjects := TbGameObjArr.Create();
 end;
 
@@ -252,8 +257,12 @@ var
   i: Integer;
 begin
   FAllModels.Clear();
+  FAllEmissives.Clear();
   for i := 0 to FVisibleObjects.Count - 1 do
+  begin
     FVisibleObjects[i].WriteModels(FAllModels);
+    FVisibleObjects[i].WriteEmissive(FAllEmissives);
+  end;
 end;
 
 procedure TbWorldRenderer.InvalidateShaders;
@@ -311,7 +320,23 @@ begin
   FModelsProgram.SetUniform('light_matrices', FLightRenderer.LightMatrices);
   FModelsProgram.SetUniform('ShadowCube512', FLightRenderer.Cubes512, sCubes);
   FModels.Select();
+
+  //depth prepass
+  Main.States.ColorMask[AllTargets] := [];
   FModels.Draw(FAllModels);
+
+  //color pass
+  Main.States.ColorMask[AllTargets] := AllChanells;
+  Main.States.DepthFunc := cfEqual;
+  FModels.Draw(FAllModels);
+  Main.States.DepthFunc := cfGreater;
+
+  //draw non depth objects
+  FModelsEmissionProgram.Select();
+  FModels.Select();
+  Main.States.DepthWrite := False;
+  FModels.Draw(FAllEmissives);
+  Main.States.DepthWrite := True;
 
   FPostProcess.DoPostProcess(FGBuffer.GetColor(0), FGBuffer.GetColor(1), FGBuffer.GetDepth);
 
@@ -408,6 +433,11 @@ begin
 end;
 
 procedure TbGameObject.WriteModels(const ACollection: IavModelInstanceArr);
+begin
+
+end;
+
+procedure TbGameObject.WriteEmissive(const ACollection: IavModelInstanceArr);
 begin
 
 end;

@@ -626,7 +626,7 @@ procedure TavLightRenderer.AfterConstruction;
 var cSize: TVec3i;
 begin
   inherited AfterConstruction;
-  cSize := Vec(32,32,32);
+  cSize := Vec(4,4,4);
   cSize := cSize * cComputeDispatchSize;
 
   FLights := TavLightArr.Create();
@@ -650,11 +650,6 @@ begin
   FCubes512 := TavShadowTextures.Create(Self, 512, 6);
 
   FLightMatricesSB := TavSBManaged.Create(Self);
-  //FLightMatrices.Vertices :=
-
-  //FRenderCluster_FBO := TavFrameBuffer.Create(Self);
-  //FRenderCluster_FBO.SetUAV(0, FLightsHeadBuffer);
-  //FRenderCluster_FBO.SetUAV(1, FLightsHeadBuffer);
 end;
 
 end.

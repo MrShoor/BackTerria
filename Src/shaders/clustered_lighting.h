@@ -4,7 +4,7 @@
 #include "lighting_types.h"
 #pragma pack_matrix( row_major )
 
-#define DEPTH_BIAS 0.0000000
+#define DEPTH_BIAS 0.000
 
 //input
 float3 light_headBufferSize;
@@ -40,7 +40,7 @@ float _sampleCubeShadowRude(float3 Pt, Light light)
     float4 projPt = mul(m, float4(Pt,1.0));
     projPt.z /= projPt.w;
     
-    return ShadowCube512.SampleCmpLevelZero(ShadowCube512Sampler, float4(cubeDir,light.ShadowSizeSliceRange.y/6), projPt.z+DEPTH_BIAS).r;
+    return ShadowCube512.SampleCmpLevelZero(ShadowCube512Sampler, float4(cubeDir,light.ShadowSizeSliceRange.y/6.0), projPt.z-DEPTH_BIAS).r;
 }
 
 #define SHADOW_SAMPLES_COUNT 16
@@ -75,21 +75,20 @@ float _sampleCubeShadowPCF16(float3 Pt, Light light) {
 	SideVector *= 1.0 / 32.0;
 	UpVector *= 1.0 / 32.0;
 
-	float totalShadow = 0;
-
         float4x4 m = getCubeMatrix(L, light.MatrixOffset);
         float4 projPt = mul(m, float4(Pt,1.0));
         projPt.z /= projPt.w;
-        float sD = projPt.z;
+        float sD = projPt.z;        
+        
+	float totalShadow = 0;
         
 	[unroll] 
         for(int i = 0; i < SHADOW_SAMPLES_COUNT; ++i)
 	{
-		float3 SamplePos = L + SideVector * (ShadowHammerslayPts[i].x-0.5) + UpVector * (ShadowHammerslayPts[i].y - 0.5);
-                
+		float3 SamplePos = L + SideVector * (ShadowHammerslayPts[i].x-0.5) + UpVector * (ShadowHammerslayPts[i].y - 0.5);                
 		totalShadow += ShadowCube512.SampleCmpLevelZero(
 			ShadowCube512Sampler, 
-			float4(SamplePos, light.ShadowSizeSliceRange.y/6), 
+			float4(SamplePos, light.ShadowSizeSliceRange.y/6.0), 
 			sD).r;
 	}
 	totalShadow /= SHADOW_SAMPLES_COUNT;
@@ -110,7 +109,7 @@ float3 PhongColor(float3 Normal, float3 ViewDir, float3 LightDir, float3 LightCo
 }
 
 float4 Clustered_Phong(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 Normal, float3 ViewDir, float4 Diffuse, float4 Specular, float4 Ambient, float SpecPower) {
-    float4 Out = float4(Ambient.xyz, 1.0);
+    float4 Out = float4(Ambient.xyz*Diffuse.xyz, 1.0);
     
     float z = (ViewPos.z - planesNearFar.x) / (planesNearFar.y - planesNearFar.x);
     ProjPos.xy *= 0.5;
