@@ -86,6 +86,7 @@ procedure TfrmMain.FormPaint(Sender: TObject);
     if measureTime > FFPSMeasureTime then
     begin
       FFPSMeasureTime := measureTime;
+      Caption := IntToStr(FFPSCounter*10 + Random(10));
       FFPSCounter := 0;
     end
     else

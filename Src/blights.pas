@@ -567,7 +567,7 @@ end;
 
 procedure TavLightRenderer.Render(const ARenderer: IGeometryRenderer);
 var
-  i, ii: Integer;
+  i: Integer;
   ld: TLightData;
   fbo: TavFrameBuffer;
 begin
@@ -580,19 +580,14 @@ begin
 
   for i := 0 to FLights.Count - 1 do
   begin
-    if Random(2) = 0 then
-      ii := i
-    else
-      ii := FLights.Count - i - 1;
-
-    ld := FLightsData[ii];
+    ld := FLightsData[i];
     if ld.ShadowSizeSliceRange.y >= 0 then
     begin
       fbo := FCubes512.GetFBO(ld.ShadowSizeSliceRange);
       fbo.FrameRect := RectI(0, 0, FCubes512.TextureSize, FCubes512.TextureSize);
       fbo.Select();
       fbo.ClearDS(Main.Projection.DepthRange.y);
-      ARenderer.ShadowPassGeometry( FLights[ii], ld);
+      ARenderer.ShadowPassGeometry( FLights[i], ld);
     end;
   end;
 end;

@@ -169,6 +169,8 @@ type
 
 implementation
 
+var gvCounter: Int64;
+
 { TbWorldRenderer.TShadowPassAdapter }
 
 procedure TbWorldRenderer.TShadowPassAdapter.ShadowPassGeometry(
@@ -355,7 +357,10 @@ begin
   Result := TavModelInstanceArr.Create();
   Result.Capacity := Length(ANames);
   for i := Low(ANames) to High(ANames) do
-    Result.Add( FModels.ObtainModel(FPrefabs[ANames[i]]) );
+  begin
+    Result.Add( FModels.ObtainModel(FPrefabs[ANames[i]].Clone(IntToStr(gvCounter))) );
+    Inc(gvCounter);
+  end;
 end;
 
 procedure TbWorldRenderer.PreloadModels(const AFiles: array of string);
