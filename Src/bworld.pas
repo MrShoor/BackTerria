@@ -93,10 +93,13 @@ type
 
   TbWorldRenderer = class (TavMainRenderChild)
   private type
+
+    { TShadowPassAdapter }
+
     TShadowPassAdapter = class(TInterfacedObject, IGeometryRenderer)
     private
       FOwner: TbWorldRenderer;
-      procedure ShadowPassGeometry(const ALight: TLightData; const APointLightMatrices: TPointLightMatrices);
+      procedure ShadowPassGeometry(const ALight: TavLightSource; const ALightData: TLightData);
       procedure DrawTransparentGeometry();
     public
       constructor Create(AOwner: TbWorldRenderer);
@@ -167,11 +170,12 @@ implementation
 { TbWorldRenderer.TShadowPassAdapter }
 
 procedure TbWorldRenderer.TShadowPassAdapter.ShadowPassGeometry(
-  const ALight: TLightData; const APointLightMatrices: TPointLightMatrices);
+  const ALight: TavLightSource; const ALightData: TLightData);
 begin
   FOwner.FModelsShadowProgram.Select;
   FOwner.FModelsShadowProgram.SetUniform('matCount', 6);
-  FOwner.FModelsShadowProgram.SetUniform('viewProj', @APointLightMatrices.viewProj[0], 6);
+  FOwner.FModelsShadowProgram.SetUniform('sliceOffset', Integer(round(ALightData.ShadowSizeSliceRange.y)));
+  FOwner.FModelsShadowProgram.SetUniform('viewProj', ALight.Matrices, 6);
   FOwner.FModels.Select;
   FOwner.FModels.Draw(FOwner.FAllModels);
 end;
@@ -268,7 +272,7 @@ end;
 
 procedure TbWorldRenderer.DrawWorld;
 const
-    Sampler_Cubes : TSamplerInfo = (
+    cSampler_Cubes : TSamplerInfo = (
       MinFilter  : tfLinear;
       MagFilter  : tfLinear;
       MipFilter  : tfLinear;
@@ -279,7 +283,11 @@ const
       Border     : (x: 0; y: 0; z: 0; w: 0);
       Comparison : cfGreater;
     );
+var sCubes: TSamplerInfo;
 begin
+  sCubes := cSampler_Cubes;
+  sCubes.Comparison := Main.States.DepthFunc;
+
   Main.States.DepthTest := True;
 
   Main.States.CullMode := cmFront;
@@ -300,8 +308,8 @@ begin
   FModelsProgram.SetUniform('light_headBufferSize', FLightRenderer.LightsHeadBuffer.Size*1.0);
   FModelsProgram.SetUniform('light_headBuffer', FLightRenderer.LightsHeadBuffer, Sampler_NoFilter);
   FModelsProgram.SetUniform('light_linkedList', FLightRenderer.LightsLinkedList);
-  FModelsProgram.SetUniform('ShadowCube512', FLightRenderer.Cubes512, Sampler_Cubes);
-  FModelsProgram.SetUniform('CubeMatrices', FLightRenderer.LightMatrices);
+  FModelsProgram.SetUniform('light_matrices', FLightRenderer.LightMatrices);
+  FModelsProgram.SetUniform('ShadowCube512', FLightRenderer.Cubes512, sCubes);
   FModels.Select();
   FModels.Draw(FAllModels);
 

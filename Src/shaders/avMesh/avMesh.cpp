@@ -60,7 +60,7 @@ PS_Output PS(VS_Output In) {
     //Out.Color = PhongColor(-norm, normalize(In.vCoord), normalize(In.vCoord), 0.5, diff, 1.0, 0.001, 80.0);
     Out.Color = Clustered_Phong(pCrd.xyz, In.vCoord, In.wCoord, norm, normalize(In.vCoord), diff, 0.5, 0.001, 80.0);
     Out.Normal = PackNormal(norm);
-    //Out.Color.rgb = dot(norm, )
+    //Out.Color = diff;
     
     return Out;
 }

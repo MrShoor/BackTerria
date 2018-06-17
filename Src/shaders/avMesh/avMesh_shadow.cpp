@@ -28,6 +28,7 @@ struct GS_Output {
 
 float4x4 viewProj[6];
 uint matCount;
+uint sliceOffset;
 
 [maxvertexcount(3*6)]
 void GS( triangle VS_Output input[3], inout TriangleStream<GS_Output> OutputStream )
@@ -40,7 +41,7 @@ void GS( triangle VS_Output input[3], inout TriangleStream<GS_Output> OutputStre
         {
             GS_Output Out;
             Out.Pos = mul(float4(input[j].Coord,1.0), viewProj[i]);
-            Out.ArrayIdx = i;
+            Out.ArrayIdx = i;// + sliceOffset;
             Out.vsTex = input[j].vsTex;
             Out.MatIndex = input[j].MatIndex;		
             OutputStream.Append( Out );

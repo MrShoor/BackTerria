@@ -21,8 +21,8 @@ VS_Output VS(VS_Input In) {
 ///////////////////////////////////////////////////////////////////////////////
 
 #define SAMPLES_COUNT 16
-#define SSAO_RADIUS 2.0
-#define SSAO_BIAS SSAO_RADIUS * 0.05
+#define SSAO_RADIUS 1.0
+#define SSAO_BIAS SSAO_RADIUS * 0.1
 
 
 struct PS_Output {

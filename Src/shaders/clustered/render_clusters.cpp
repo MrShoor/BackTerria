@@ -31,12 +31,12 @@ Frustum BuildFrustum(float3 boundmin, float3 boundmax) {
     float3 pt3 = Unproject(float3(boundmin.x, boundmax.y, boundmax.z));
     float3 pt4 = Unproject(float3(boundmax.x, boundmin.y, boundmax.z));
     float3 pt5 = Unproject(boundmax);
-    Out.plane[0].xyz = cross(pt2-pt0, pt1-pt0); //near
-    Out.plane[1].xyz = cross(pt4-pt5, pt3-pt5); //far
-    Out.plane[2].xyz = cross(pt5-pt4, pt2-pt4); //right
-    Out.plane[3].xyz = cross(pt3-pt1, pt0-pt1); //left
-    Out.plane[4].xyz = cross(pt1-pt3, pt5-pt3); //top
-    Out.plane[5].xyz = cross(pt0-pt2, pt4-pt2); //bottom
+    Out.plane[0].xyz = -normalize(cross(pt2-pt0, pt1-pt0)); //near
+    Out.plane[1].xyz = -normalize(cross(pt4-pt5, pt3-pt5)); //far
+    Out.plane[2].xyz = -normalize(cross(pt5-pt4, pt2-pt4)); //right
+    Out.plane[3].xyz = -normalize(cross(pt3-pt1, pt0-pt1)); //left
+    Out.plane[4].xyz = -normalize(cross(pt1-pt3, pt5-pt3)); //top
+    Out.plane[5].xyz = -normalize(cross(pt0-pt2, pt4-pt2)); //bottom
 
     Out.plane[0].w = -dot(Out.plane[0].xyz, pt0); //near
     Out.plane[1].w = -dot(Out.plane[1].xyz, pt5); //far
@@ -54,9 +54,6 @@ Frustum BuildFrustum(float3 boundmin, float3 boundmax) {
     Out.pts[6] = Unproject(float3(boundmax.x, boundmax.y, boundmin.z));
     Out.pts[7] = Unproject(float3(boundmin.x, boundmin.y, boundmax.z));
     
-    [unroll]
-    for (uint i=0; i<6; i++)
-        Out.plane[i] /= length(Out.plane[i].xyz);
     return Out;
 }
 
@@ -64,7 +61,7 @@ bool LightInFrustum(Light light, Frustum f) {
     uint i;
     uint j;
     for (i = 0; i < 6; i++) {
-        if (dot(f.plane[i].xyz, light.PosRange.xyz) - f.plane[i].w > light.PosRange.w) return false;
+        if (dot(f.plane[i].xyz, light.PosRange.xyz) + f.plane[i].w > light.PosRange.w) return false;
     }
     for (i = 0; i < 8; i++) {
         float4 pl;

@@ -4,7 +4,7 @@
 #include "lighting_types.h"
 #pragma pack_matrix( row_major )
 
-#define DEPTH_BIAS 0.001
+#define DEPTH_BIAS 0.0000000
 
 //input
 float3 light_headBufferSize;
@@ -12,12 +12,12 @@ Texture3D<uint> light_headBuffer;
 StructuredBuffer<ListNode> light_linkedList;
 
 TextureCubeArray ShadowCube512; SamplerComparisonState ShadowCube512Sampler;
-StructuredBuffer<float4x4> CubeMatrices;
+//TextureCubeArray ShadowCube512; SamplerState ShadowCube512Sampler;
 //input
 
-float4x4 getCubeMatrix(float3 LightDir, int lightIdx) {
+float4x4 getCubeMatrix(float3 LightDir, int matIdx) {
     float dmax = max(abs(LightDir.x), max(abs(LightDir.y), abs(LightDir.z)));
-    int n = lightIdx;
+    int n = matIdx;
     if (dmax == -LightDir.x) {
         n = n + 1;
     } else if (dmax == LightDir.y) {
@@ -29,18 +29,18 @@ float4x4 getCubeMatrix(float3 LightDir, int lightIdx) {
     } else if (dmax == -LightDir.z) {
         n = n + 5;
     }
-    return CubeMatrices[n];
+    return light_matrices[n];
 }
 
-float _sampleCubeShadowRude(float3 Pt, Light light, int lightIdx)
+float _sampleCubeShadowRude(float3 Pt, Light light)
 {
     if (light.ShadowSizeSliceRange.y < 0) return 0.0;
     float3 cubeDir = Pt - light.PosRange.xyz;
-    float4x4 m = getCubeMatrix(cubeDir, lightIdx);
+    float4x4 m = getCubeMatrix(cubeDir, light.MatrixOffset);
     float4 projPt = mul(m, float4(Pt,1.0));
     projPt.z /= projPt.w;
     
-    return ShadowCube512.SampleCmpLevelZero(ShadowCube512Sampler, float4(cubeDir,light.ShadowSizeSliceRange.y), projPt.z+DEPTH_BIAS).r;
+    return ShadowCube512.SampleCmpLevelZero(ShadowCube512Sampler, float4(cubeDir,light.ShadowSizeSliceRange.y/6), projPt.z+DEPTH_BIAS).r;
 }
 
 #define SHADOW_SAMPLES_COUNT 16
@@ -64,7 +64,7 @@ static const float2 ShadowHammerslayPts[SHADOW_SAMPLES_COUNT] = {
     {0.9718009, 0.9745528}
 };
 
-float _sampleCubeShadowPCF16(float3 Pt, Light light, int lightIdx) {
+float _sampleCubeShadowPCF16(float3 Pt, Light light) {
         if (light.ShadowSizeSliceRange.y < 0) return 0.0;
         float3 L = Pt - light.PosRange.xyz;
         float3 Llen = length(L);
@@ -77,19 +77,19 @@ float _sampleCubeShadowPCF16(float3 Pt, Light light, int lightIdx) {
 
 	float totalShadow = 0;
 
-        float4x4 m = getCubeMatrix(L, lightIdx);
+        float4x4 m = getCubeMatrix(L, light.MatrixOffset);
         float4 projPt = mul(m, float4(Pt,1.0));
         projPt.z /= projPt.w;
         float sD = projPt.z;
         
-	[UNROLL] 
+	[unroll] 
         for(int i = 0; i < SHADOW_SAMPLES_COUNT; ++i)
 	{
 		float3 SamplePos = L + SideVector * (ShadowHammerslayPts[i].x-0.5) + UpVector * (ShadowHammerslayPts[i].y - 0.5);
                 
 		totalShadow += ShadowCube512.SampleCmpLevelZero(
 			ShadowCube512Sampler, 
-			float4(SamplePos, light.ShadowSizeSliceRange.y), 
+			float4(SamplePos, light.ShadowSizeSliceRange.y/6), 
 			sD).r;
 	}
 	totalShadow /= SHADOW_SAMPLES_COUNT;
@@ -133,11 +133,15 @@ float4 Clustered_Phong(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 N
         LightDir /= dist;
         float atten = saturate(1.0 - ((dist * dist) / (l.PosRange.w * l.PosRange.w)));
         
-        atten *= _sampleCubeShadowPCF16(WorldPos, l, node.LightIdx);
+        //if (l.ShadowSizeSliceRange.y == 6) {
+            atten *= _sampleCubeShadowPCF16(WorldPos, l);
         
         Out.xyz += PhongColor(Normal, ViewDir, LightDir, l.Color, Diffuse, Specular, SpecPower)*atten;        
+        //}
+        
+        //Out.xyz = 1.0;
     }
-    
+        
     return Out;
 }
 
