@@ -11,7 +11,7 @@
         <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
     </CompilerOptions>
-    <Files Count="10">
+    <Files Count="11">
       <Item1>
         <Filename Value="bworld.pas"/>
         <UnitName Value="bWorld"/>
@@ -50,8 +50,12 @@
       </Item9>
       <Item10>
         <Filename Value="bbasslight.pas"/>
-        <UnitName Value="bbasslight"/>
+        <UnitName Value="bBassLight"/>
       </Item10>
+      <Item11>
+        <Filename Value="bminiparticles.pas"/>
+        <UnitName Value="bminiparticles"/>
+      </Item11>
     </Files>
     <RequiredPkgs Count="2">
       <Item1>

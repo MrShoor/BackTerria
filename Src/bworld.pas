@@ -16,6 +16,7 @@ uses
   bTypes,
   bLights,
   bPostProcess,
+  bMiniParticles,
   bBassLight,
   avBase,
   avTypes,
@@ -69,6 +70,7 @@ type
     procedure ClearModels(AType: TModelType); virtual;
     procedure AddModel(const AName: string; AType: TModelType = mtDefault); virtual;
     procedure WriteModels(const ACollection: IavModelInstanceArr; AType: TModelType); virtual;
+    procedure WriteParticles(const ACollection: IParticlesHandleArr); virtual;
 
     function  UIIndex: Integer; virtual;
     procedure UIDraw(); virtual;
@@ -117,6 +119,8 @@ type
     FShadowPassAdapter: IGeometryRenderer;
     FPostProcess: TavPostProcess;
 
+    FParticles: TbParticleSystem;
+
     FGBuffer: TavFrameBuffer;
 
     FModelsProgram: TavProgram;
@@ -143,6 +147,7 @@ type
 
     function CreatePointLight(): IavPointLight;
     function CreateModelInstances(const ANames: array of string): IavModelInstanceArr;
+    function Particles: TbParticleSystem;
 
     procedure PreloadModels(const AFiles: array of string);
   end;
@@ -165,7 +170,7 @@ type
     FSndPlayer: ILightPlayer;
     procedure SetWorldState(const AValue: TbGameObject);
   public
-    property Renderer: TbWorldRenderer read FRenderer;
+    property Renderer : TbWorldRenderer read FRenderer;
     property SndPlayer: ILightPlayer read FSndPlayer;
 
     function QueryObjects(const AViewProj: TMat4): IbGameObjArr; overload;
@@ -234,6 +239,7 @@ begin
   inherited AfterRegister;
   FLightRenderer := TavLightRenderer.Create(Self);
   FShadowPassAdapter := TShadowPassAdapter.Create(Self);
+  FParticles := TbParticleSystem.Create(Self);
 
   FPostProcess := TavPostProcess.Create(Self);
 
@@ -368,6 +374,11 @@ begin
   end;
 end;
 
+function TbWorldRenderer.Particles: TbParticleSystem;
+begin
+  Result := FParticles;
+end;
+
 procedure TbWorldRenderer.PreloadModels(const AFiles: array of string);
 var
   i: Integer;
@@ -479,9 +490,14 @@ begin
   end;
 end;
 
-function TbGameObject.UIIndex: Integer;
+procedure TbGameObject.WriteParticles(const ACollection: IParticlesHandleArr);
 begin
 
+end;
+
+function TbGameObject.UIIndex: Integer;
+begin
+  Result := 0;
 end;
 
 procedure TbGameObject.UIDraw;
@@ -545,7 +561,7 @@ begin
     FWorld.FUpdateSubs.Delete(Self);
     FWorld.FUIObjects.Delete(Self);
     if FWorld.WorldState = Self then
-      FWorld.WorldState = nil;
+      FWorld.WorldState := nil;
   end;
   inherited Destroy;
 end;

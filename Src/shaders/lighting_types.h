@@ -11,6 +11,8 @@
 struct Light {
     float4 PosRange;
     float3 Color;
+    float3 Dir;
+    float2 Angles;
     uint   MatrixOffset;  
     int3   ShadowSizeSliceRange;
 };

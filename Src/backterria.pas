@@ -9,7 +9,7 @@ interface
 
 uses
   bWorld, bTypes, bLevel, bWork, bFPVCamera, bLights, bPostProcess, bUtils, 
-  bBassLight, LazarusPackageIntf;
+  bBassLight, bMiniParticles, LazarusPackageIntf;
 
 implementation
 
