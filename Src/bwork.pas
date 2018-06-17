@@ -12,27 +12,24 @@ uses
   avModel, avTexLoader, bFPVCamera, bLights, bUtils;
 
 type
-
   { TbLighter }
 
   TbLighter = class (TbGameObject)
   private
-    FLightSources: array of TavPointLight;
+    FLightSources: array of IavPointLight;
     FModelSphere: IavModelInstance;
   protected
     procedure SetPos(const AValue: TVec3); override;
     procedure AfterRegister; override;
-
-    procedure WriteEmissive(const ACollection: IavModelInstanceArr); override;
   public
-    destructor Destroy; override;
+    procedure WriteModels(const ACollection: IavModelInstanceArr; AType: TModelType = mtDefault); override;
   end;
 
   { TbAnimatedLighter }
 
   TbAnimatedLighter = class (TbStaticObject)
   private
-    FLight: TavPointLight;
+    FLight: IavPointLight;
     FModelSphere: IavModelInstance;
     FRoute: array of TVec3;
     FRoutePos: TPathPos;
@@ -44,8 +41,8 @@ type
   protected
     procedure SetPos(const AValue: TVec3); override;
     procedure UpdateStep; override;
-
-    procedure WriteEmissive(const ACollection: IavModelInstanceArr); override;
+  public
+    procedure WriteModels(const ACollection: IavModelInstanceArr; AType: TModelType = mtDefault); override;
   protected
     procedure AfterRegister; override;
   end;
@@ -135,8 +132,9 @@ begin
   Pos := p;
 end;
 
-procedure TbAnimatedLighter.WriteEmissive(const ACollection: IavModelInstanceArr);
+procedure TbAnimatedLighter.WriteModels(const ACollection: IavModelInstanceArr; AType: TModelType);
 begin
+  if AType <> mtEmissive then Exit;
   ACollection.Add(FModelSphere);
 end;
 
@@ -158,15 +156,6 @@ begin
   FModelSphere := World.Renderer.CreateModelInstances(['light_source']).Item[0];
 end;
 
-destructor TbLighter.Destroy;
-var
-  i: Integer;
-begin
-  for i := 0 to Length(FLightSources) - 1 do
-    FreeAndNil(FLightSources[i]);
-  inherited;
-end;
-
 procedure TbLighter.SetPos(const AValue: TVec3);
 var i: Integer;
 begin
@@ -176,8 +165,9 @@ begin
       FLightSources[i].Pos := Pos;
 end;
 
-procedure TbLighter.WriteEmissive(const ACollection: IavModelInstanceArr);
+procedure TbLighter.WriteModels(const ACollection: IavModelInstanceArr; AType: TModelType);
 begin
+  if AType <> mtEmissive then Exit;
   FModelSphere.Mesh.Transform := Transform();
   ACollection.Add(FModelSphere);
 end;

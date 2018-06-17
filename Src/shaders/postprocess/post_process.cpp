@@ -48,6 +48,8 @@ static const float2 uHammerslayPts[SAMPLES_COUNT] = {
     {0.9718009, 0.9745528}
 };
 
+float3 uHammerslaySpherePts[SAMPLES_COUNT];
+
 Texture2D Color; SamplerState ColorSampler;
 Texture2D Depth; SamplerState DepthSampler;
 Texture2D Normals; SamplerState NormalsSampler;
@@ -80,11 +82,20 @@ float3 Get_SphereSample(int sample_idx, float2 offset) {
     return float3(sin(h.x) * cos(h.y), sin(h.x) * sin(h.y), cos(h.x));
 }
 
+float3 Get_SphereSample2(int sample_idx, float3 n) {
+    float2 h = uHammerslayPts[sample_idx].xy;
+    h.x = acos(frac(1.0-h.x));
+    h.y *= 2*M_PI;
+    float3 r = float3(sin(h.x) * cos(h.y), sin(h.x) * sin(h.y), cos(h.x));
+    return reflect(r, normalize(n));
+    //return reflect(uHammerslaySpherePts[sample_idx], n);
+}
+
 float3 Get_Random(int2 pixel) {
     return RandomTex.Sample(RandomTexSampler, pixel / 4.0).xyz;
 }
 
-float SampleOcclusion(float3 vCoord, float originalZ){
+float SampleOcclusion(float3 vCoord){
     float4 pCoord = mul(float4(vCoord,1.0), P_Matrix);
     pCoord.xy /= pCoord.w;
     float2 uv = pCoord.xy*float2(0.5,-0.5) + float2(0.5,0.5);
@@ -104,9 +115,9 @@ PS_Output PS(VS_Output In) {
     
     float ssao = 0;
     for (int i = 0; i < SAMPLES_COUNT; i++) {
-        float3 sample = Get_SphereSample(i, rnd.xy);
+        float3 sample = Get_SphereSample2(i, rnd.xyz);
         sample *= sign(dot(sample, vNormal));
-        ssao += SampleOcclusion(SampleStart+sample*SSAO_RADIUS, vPos.z);
+        ssao += SampleOcclusion(SampleStart+sample*SSAO_RADIUS);
     }
     ssao = 1.0 - ssao/SAMPLES_COUNT;
     //ssao = pow(ssao, 2.2);

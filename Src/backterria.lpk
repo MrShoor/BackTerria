@@ -11,7 +11,7 @@
         <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
     </CompilerOptions>
-    <Files Count="8">
+    <Files Count="10">
       <Item1>
         <Filename Value="bworld.pas"/>
         <UnitName Value="bWorld"/>
@@ -42,8 +42,16 @@
       </Item7>
       <Item8>
         <Filename Value="butils.pas"/>
-        <UnitName Value="butils"/>
+        <UnitName Value="bUtils"/>
       </Item8>
+      <Item9>
+        <Filename Value="bshaders.inc"/>
+        <Type Value="Binary"/>
+      </Item9>
+      <Item10>
+        <Filename Value="bbasslight.pas"/>
+        <UnitName Value="bbasslight"/>
+      </Item10>
     </Files>
     <RequiredPkgs Count="2">
       <Item1>

@@ -9,9 +9,7 @@ interface
 uses
   Classes, SysUtils, avRes, avTypes, mutils;
 
-const
-  SHADERS_FROMRES = False;
-  SHADERS_DIR = 'D:\Projects\BackTerria\Src\shaders\!Out';
+{$I bshaders.inc}
 
 type
 
@@ -19,6 +17,7 @@ type
 
   TavPostProcess = class (TavMainRenderChild)
   private
+    FHammersleySphere: TVec4Arr;
     FResultFBO: TavFrameBuffer;
     FPostProcess: TavProgram;
     FRandomTex: TavTexture;
@@ -37,7 +36,7 @@ type
 implementation
 
 uses
-  avTexLoader;
+  avTexLoader, Math;
 
 const
   Sampler_Depth : TSamplerInfo = (
@@ -72,10 +71,14 @@ procedure TavPostProcess.AfterRegister;
     pv := PVec4(mip.Data);
     for i := 0 to S * S - 1 do
     begin
-      pv^ := Vec(Random(), Random(), Random(), 0);
+      pv^ := normalize(Vec(Random()-0.5, Random()-0.5, Random()-0.5, 0));
       Inc(pv);
     end;
   end;
+
+var
+  i: Integer;
+  h: TVec2;
 
 begin
   inherited AfterRegister;
@@ -87,6 +90,15 @@ begin
   FRandomTex := TavTexture.Create(Self);
   FRandomTex.TargetFormat := TTextureFormat.RGBA32f;
   FRandomTex.TexData := GetRandomTextureData;
+
+  FHammersleySphere := GenerateHammersleyPts(16);
+  for i := 0 to Length(FHammersleySphere) - 1 do
+  begin
+    h := FHammersleySphere[i].xy;
+    h.x := arccos(1.0-h.x);
+    h.y := h.y*2*Pi;
+    FHammersleySphere[i].xyz := Vec(sin(h.x) * cos(h.y), sin(h.x) * sin(h.y), cos(h.x));
+  end;
 end;
 
 procedure TavPostProcess.InvalidateShaders;
@@ -104,6 +116,7 @@ begin
   FPostProcess.SetUniform('Normals', ANormal, Sampler_NoFilter);
   FPostProcess.SetUniform('Depth', ADepth, Sampler_Depth);
   FPostProcess.SetUniform('RandomTex', FRandomTex, Sampler_Linear);
+  FPostProcess.SetUniform('uHammerslaySpherePts', FHammersleySphere);
   FPostProcess.Draw(ptTriangleStrip, cmNone, False, 0, 0, 4);
 end;
 

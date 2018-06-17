@@ -59,9 +59,9 @@ struct PS_Output {
 };
 
 void PS(GS_Output In) {
-    ModelMaterialDesc m = LoadMaterialDesc((int)In.MatIndex);
-    float4 diff = m.Diffuse_Color(In.vsTex, m.Diff);
-    if (diff.a < 0.1) discard;
+//    ModelMaterialDesc m = LoadMaterialDesc((int)In.MatIndex);
+//    float4 diff = m.Diffuse_Color(In.vsTex, m.Diff);
+//    if (diff.a < 0.1) discard;
     
 //    PS_Output Out;
 //    Out.Color = In.Pos.z;

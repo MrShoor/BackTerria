@@ -10,12 +10,13 @@ interface
 uses
   Classes, SysUtils, avBase, avRes, avTypes, avContnrs, avTess, mutils;
 
-const
-  SHADERS_FROMRES = False;
-  SHADERS_DIR = 'D:\Projects\BackTerria\Src\shaders\!Out';
+{$I bshaders.inc}
 
 type
   TavLightSource = class;
+  IavLightAdapter = interface
+    procedure _DisconnectAdapter;
+  end;
 
   { TPointLightMatrices }
 
@@ -76,7 +77,11 @@ type
     FMatrices: IShadowMatrixArr;
     FMatricesHandle: ISBManagedHandle;
 
+    FAdapter: Pointer;
+
     procedure SetCastShadows(const AValue: Boolean);
+
+    procedure SetAdapter(const AAdapter: IavLightAdapter);
   protected
     function LightRenderer: TavLightRenderer; inline;
     function CanRegister(target: TavObject): boolean; override;
@@ -96,6 +101,34 @@ type
   TavLightArr = {$IfDef FPC}specialize{$EndIf}TArray<TavLightSource>;
   IavLightSet = {$IfDef FPC}specialize{$EndIf}IHashSet<TavLightSource>;
   TavLightSet = {$IfDef FPC}specialize{$EndIf}THashSet<TavLightSource>;
+
+  { IavLightSource }
+
+  IavLightSource = interface (IavLightAdapter)
+    function GetCastShadows: Boolean;
+    procedure SetCastShadows(const AValue: Boolean);
+
+    function ShadowSlice: IShadowSlice;
+
+    property CastShadows: Boolean read GetCastShadows write SetCastShadows;
+    function Matrices: PMat4;
+    function MatricesCount: Integer;
+  end;
+
+  { IavPointLight }
+
+  IavPointLight = interface (IavLightSource)
+    function GetColor: TVec3;
+    function GetPos: TVec3;
+    function GetRadius: Single;
+    procedure SetColor(const AValue: TVec3);
+    procedure SetPos(const AValue: TVec3);
+    procedure SetRadius(const AValue: Single);
+
+    property Pos   : TVec3  read GetPos    write SetPos;
+    property Radius: Single read GetRadius write SetRadius;
+    property Color : TVec3  read GetColor  write SetColor;
+  end;
 
   { TavPointLight }
 
@@ -183,7 +216,7 @@ type
   public
     procedure InvalidateShaders;
 
-    function AddPointLight(): TavPointLight;
+    function AddPointLight(): IavPointLight;
 
     function  LightsCount: Integer;
     function  GetLight(AIndex: Integer): TavLightSource;
@@ -203,8 +236,144 @@ type
 implementation
 
 const
-  cComputeDispatchSize = 8;
+  cComputeDispatchSize = 4;
   cAverageLightsPerCluster = 4;
+
+type
+
+  { TavLightSourceAdapter }
+
+  TavLightSourceAdapter = class (TInterfacedObject, IavLightSource)
+  private
+    function GetCastShadows: Boolean;
+    procedure SetCastShadows(const AValue: Boolean);
+    function ShadowSlice: IShadowSlice;
+    function Matrices: PMat4;
+    function MatricesCount: Integer;
+  protected
+    procedure _DisconnectAdapter; virtual; abstract;
+    function GetLightSource: TavLightSource; virtual; abstract;
+  public
+    destructor Destroy; override;
+  end;
+
+  { TavPointLightAdapter }
+
+  TavPointLightAdapter = class (TavLightSourceAdapter, IavPointLight)
+  private
+    FLight: TavPointLight;
+    function GetColor: TVec3;
+    function GetPos: TVec3;
+    function GetRadius: Single;
+    procedure SetColor(const AValue: TVec3);
+    procedure SetPos(const AValue: TVec3);
+    procedure SetRadius(const AValue: Single);
+  protected
+    procedure _DisconnectAdapter; override;
+    function GetLightSource: TavLightSource; override;
+  public
+    constructor Create(const ALight: TavPointLight);
+  end;
+
+{ TavPointLightAdapter }
+
+function TavPointLightAdapter.GetColor: TVec3;
+begin
+  if FLight = nil then Exit(Vec(0,0,0));
+  Result := FLight.Color;
+end;
+
+function TavPointLightAdapter.GetPos: TVec3;
+begin
+  if FLight = nil then Exit(Vec(0,0,0));
+  Result := FLight.Pos;
+end;
+
+function TavPointLightAdapter.GetRadius: Single;
+begin
+  if FLight = nil then Exit(0);
+  Result := FLight.Radius;
+end;
+
+procedure TavPointLightAdapter.SetColor(const AValue: TVec3);
+begin
+  if FLight = nil then Exit();
+  FLight.Color := AValue;
+end;
+
+procedure TavPointLightAdapter.SetPos(const AValue: TVec3);
+begin
+  if FLight = nil then Exit();
+  FLight.Pos := AValue;
+end;
+
+procedure TavPointLightAdapter.SetRadius(const AValue: Single);
+begin
+  if FLight = nil then Exit();
+  FLight.Radius := AValue;
+end;
+
+procedure TavPointLightAdapter._DisconnectAdapter;
+begin
+  FLight := nil;
+end;
+
+function TavPointLightAdapter.GetLightSource: TavLightSource;
+begin
+  Result := FLight;
+end;
+
+constructor TavPointLightAdapter.Create(const ALight: TavPointLight);
+var intf: IavPointLight;
+begin
+  intf := Self;
+  FLight := ALight;
+  FLight.SetAdapter(intf);
+end;
+
+{ TavLightSourceAdapter }
+
+function TavLightSourceAdapter.GetCastShadows: Boolean;
+begin
+  if GetLightSource = nil then Exit(False);
+  Result := GetLightSource.CastShadows;
+end;
+
+procedure TavLightSourceAdapter.SetCastShadows(const AValue: Boolean);
+begin
+  if GetLightSource = nil then Exit();
+  GetLightSource.CastShadows := AValue;
+end;
+
+function TavLightSourceAdapter.ShadowSlice: IShadowSlice;
+begin
+  if GetLightSource = nil then Exit(nil);
+  Result := GetLightSource.ShadowSlice;
+end;
+
+function TavLightSourceAdapter.Matrices: PMat4;
+begin
+  if GetLightSource = nil then Exit(nil);
+  Result := GetLightSource.Matrices;
+end;
+
+function TavLightSourceAdapter.MatricesCount: Integer;
+begin
+  if GetLightSource = nil then Exit(0);
+  Result := GetLightSource.MatricesCount;
+end;
+
+destructor TavLightSourceAdapter.Destroy;
+var ls: TavLightSource;
+begin
+  ls := GetLightSource;
+  if Assigned(ls) then
+  begin
+    ls.SetAdapter(nil);
+    FreeAndNil(ls);
+  end;
+  inherited Destroy;
+end;
 
 { TShadowMatrix }
 
@@ -449,6 +618,11 @@ begin
   InvalidateLight;
 end;
 
+procedure TavLightSource.SetAdapter(const AAdapter: IavLightAdapter);
+begin
+  FAdapter := Pointer(AAdapter);
+end;
+
 function TavLightSource.LightRenderer: TavLightRenderer;
 begin
   Result := TavLightRenderer(Parent);
@@ -497,6 +671,8 @@ destructor TavLightSource.Destroy;
 var l: TavLightSource;
 begin
   inherited Destroy;
+  if Assigned(FAdapter) then IavLightAdapter(FAdapter)._DisconnectAdapter;
+
   LightRenderer.FLights.DeleteWithSwap(FLightIndex);
   LightRenderer.FLightsData.DeleteWithSwap(FLightIndex);
   l := LightRenderer.FLights[FLightIndex];
@@ -550,9 +726,9 @@ begin
   FRenderCluster_Prog.Invalidate;
 end;
 
-function TavLightRenderer.AddPointLight: TavPointLight;
+function TavLightRenderer.AddPointLight: IavPointLight;
 begin
-  Result := TavPointLight.Create(Self);
+  Result := TavPointLightAdapter.Create(TavPointLight.Create(Self));
 end;
 
 function TavLightRenderer.LightsCount: Integer;

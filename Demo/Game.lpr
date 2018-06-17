@@ -1,6 +1,6 @@
 program Game;
 
-{$AppType Console}
+//{$AppType Console}
 {$mode objfpc}{$H+}
 
 uses

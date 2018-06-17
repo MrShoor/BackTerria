@@ -16,17 +16,23 @@ uses
   bTypes,
   bLights,
   bPostProcess,
+  bBassLight,
   avBase,
   avTypes,
   avMesh,
   avModel;
 
-const
-  SHADERS_FROMRES = False;
-  SHADERS_DIR = 'D:\Projects\BackTerria\Src\shaders\!Out';
+{$I bshaders.inc}
+{$IfDef FPC}
+  {$R 'shaders\shaders.rc'}
+{$Else}
+  //{$R '..\Src\shaders\shaders.res'}
+{$EndIf}
 
 type
   TbWorld = class;
+
+  TModelType = (mtDefault, mtEmissive, mtTransparent);
 
   { TbGameObject }
 
@@ -50,14 +56,24 @@ type
     procedure SubscribeForUpdateStep;
     procedure UnSubscribeFromUpdateStep;
     procedure UpdateStep; virtual;
+    procedure RegisterAsUIObject;
+    procedure UnRegisterAsUIObject;
   protected
     FWorld: TbWorld;
     function CanRegister(target: TavObject): boolean; override;
+  protected
+    FModels: IavModelInstanceArr;
+    FEmissive: IavModelInstanceArr;
+    FTransparent: IavModelInstanceArr;
+  public
+    procedure ClearModels(AType: TModelType); virtual;
+    procedure AddModel(const AName: string; AType: TModelType = mtDefault); virtual;
+    procedure WriteModels(const ACollection: IavModelInstanceArr; AType: TModelType); virtual;
+
+    function  UIIndex: Integer; virtual;
+    procedure UIDraw(); virtual;
   public
     property World: TbWorld read FWorld;
-
-    procedure WriteModels(const ACollection: IavModelInstanceArr); virtual;
-    procedure WriteEmissive(const ACollection: IavModelInstanceArr); virtual;
 
     property Pos  : TVec3  read FPos   write SetPos;
     property Rot  : TQuat  read FRot   write SetRot;
@@ -80,12 +96,7 @@ type
 
   TbStaticObject = class (TbGameObject)
   private
-  protected
-    FModels: IavModelInstanceArr;
   public
-    procedure WriteModels(const ACollection: IavModelInstanceArr); override;
-    procedure AddModel(const AName: string);
-
     procedure AfterConstruction; override;
   end;
 
@@ -93,9 +104,6 @@ type
 
   TbWorldRenderer = class (TavMainRenderChild)
   private type
-
-    { TShadowPassAdapter }
-
     TShadowPassAdapter = class(TInterfacedObject, IGeometryRenderer)
     private
       FOwner: TbWorldRenderer;
@@ -133,7 +141,7 @@ type
     procedure PrepareToDraw;
     procedure DrawWorld;
 
-    function CreatePointLight(): TavPointLight;
+    function CreatePointLight(): IavPointLight;
     function CreateModelInstances(const ANames: array of string): IavModelInstanceArr;
 
     procedure PreloadModels(const AFiles: array of string);
@@ -148,21 +156,30 @@ type
     FUpdateSubs: IbGameObjSet;
     FTempObjs  : IbGameObjArr;
 
+    FUIObjects : IbGameObjSet;
+    FWorldState: TbGameObject;
+
     FTimeTick: Int64;
 
     FRenderer : TbWorldRenderer;
+    FSndPlayer: ILightPlayer;
+    procedure SetWorldState(const AValue: TbGameObject);
   public
     property Renderer: TbWorldRenderer read FRenderer;
+    property SndPlayer: ILightPlayer read FSndPlayer;
 
     function QueryObjects(const AViewProj: TMat4): IbGameObjArr; overload;
     function QueryObjects(const ABox: TAABB): IbGameObjArr; overload;
     function QueryObjects(const ARay: TLine): IbGameObjArr; overload;
+    function UIObjects: IbGameObjSet;
 
     property GameTime: Int64 read FTimeTick;
 
     procedure UpdateStep();
     procedure SafeDestroy(const AObj: TbGameObject);
     procedure ProcessToDestroy;
+
+    property WorldState: TbGameObject read FWorldState write SetWorldState;
 
     procedure AfterConstruction; override;
   end;
@@ -195,18 +212,6 @@ begin
 end;
 
 { TbStaticObject }
-
-procedure TbStaticObject.WriteModels(const ACollection: IavModelInstanceArr);
-begin
-  inherited WriteModels(ACollection);
-  ACollection.AddArray(FModels);
-end;
-
-procedure TbStaticObject.AddModel(const AName: string);
-begin
-  FModels.AddArray( World.Renderer.CreateModelInstances([AName]) );
-  FModels.Last.Mesh.Transform := IdentityMat4;
-end;
 
 procedure TbStaticObject.AfterConstruction;
 begin
@@ -262,8 +267,8 @@ begin
   FAllEmissives.Clear();
   for i := 0 to FVisibleObjects.Count - 1 do
   begin
-    FVisibleObjects[i].WriteModels(FAllModels);
-    FVisibleObjects[i].WriteEmissive(FAllEmissives);
+    FVisibleObjects[i].WriteModels(FAllModels, mtDefault);
+    FVisibleObjects[i].WriteModels(FAllEmissives, mtEmissive);
   end;
 end;
 
@@ -345,7 +350,7 @@ begin
   FPostProcess.ResultFBO.BlitToWindow();
 end;
 
-function TbWorldRenderer.CreatePointLight: TavPointLight;
+function TbWorldRenderer.CreatePointLight: IavPointLight;
 begin
   Result := FLightRenderer.AddPointLight();
 end;
@@ -409,10 +414,18 @@ begin
 end;
 
 procedure TbGameObject.ValidateTransform;
+var i: Integer;
 begin
   if FTransformValid then Exit;
   FTransform := MatScale(Vec(FScale, FScale, FScale)) * Mat4(FRot, FPos);
   FTransformInv := Inv(FTransform);
+
+  for i := 0 to FModels.Count - 1 do
+    FModels[i].Mesh.Transform := FTransform;
+  for i := 0 to FEmissive.Count - 1 do
+    FEmissive[i].Mesh.Transform := FTransform;
+  for i := 0 to FTransparent.Count - 1 do
+    FTransparent[i].Mesh.Transform := FTransform;
 end;
 
 procedure TbGameObject.SubscribeForUpdateStep;
@@ -429,6 +442,16 @@ procedure TbGameObject.UpdateStep;
 begin
 end;
 
+procedure TbGameObject.RegisterAsUIObject;
+begin
+  World.FUIObjects.AddOrSet(Self);
+end;
+
+procedure TbGameObject.UnRegisterAsUIObject;
+begin
+  World.FUIObjects.Delete(Self);
+end;
+
 function TbGameObject.CanRegister(target: TavObject): boolean;
 begin
   Result := inherited CanRegister(target);
@@ -437,12 +460,31 @@ begin
   Result := Assigned(FWorld);
 end;
 
-procedure TbGameObject.WriteModels(const ACollection: IavModelInstanceArr);
+procedure TbGameObject.ClearModels(AType: TModelType);
+begin
+  case AType of
+    mtDefault : FModels.Clear();
+    mtEmissive : FEmissive.Clear();
+    mtTransparent : FTransparent.Clear();
+  end;
+end;
+
+procedure TbGameObject.WriteModels(const ACollection: IavModelInstanceArr; AType: TModelType);
+begin
+  ValidateTransform;
+  case AType of
+    mtDefault : ACollection.AddArray(FModels);
+    mtEmissive : ACollection.AddArray(FEmissive);
+    mtTransparent : ACollection.AddArray(FTransparent);
+  end;
+end;
+
+function TbGameObject.UIIndex: Integer;
 begin
 
 end;
 
-procedure TbGameObject.WriteEmissive(const ACollection: IavModelInstanceArr);
+procedure TbGameObject.UIDraw;
 begin
 
 end;
@@ -459,6 +501,27 @@ begin
   Result := FTransformInv;
 end;
 
+procedure TbGameObject.AddModel(const AName: string; AType: TModelType);
+var inst: IavModelInstanceArr;
+begin
+  inst := World.Renderer.CreateModelInstances([AName]);
+  inst[0].Mesh.Transform := Transform();
+  case AType of
+    mtDefault:
+      begin
+        FModels.Add(inst[0]);
+      end;
+    mtEmissive:
+      begin
+        FEmissive.Add(inst[0]);
+      end;
+    mtTransparent:
+      begin
+        FTransparent.Add(inst[0]);
+      end;
+  end;
+end;
+
 procedure TbGameObject.AfterConstruction;
 begin
   inherited AfterConstruction;
@@ -467,6 +530,10 @@ begin
   FBBox := EmptyAABB;
 
   FWorld.FObjects.Add(Self);
+
+  FModels := TavModelInstanceArr.Create;
+  FEmissive := TavModelInstanceArr.Create;
+  FTransparent := TavModelInstanceArr.Create;
 end;
 
 destructor TbGameObject.Destroy;
@@ -476,11 +543,20 @@ begin
     FWorld.FObjects.Delete(Self);
     FWorld.FToDestroy.Delete(Self);
     FWorld.FUpdateSubs.Delete(Self);
+    FWorld.FUIObjects.Delete(Self);
+    if FWorld.WorldState = Self then
+      FWorld.WorldState = nil;
   end;
   inherited Destroy;
 end;
 
 { TbWorld }
+
+procedure TbWorld.SetWorldState(const AValue: TbGameObject);
+begin
+  if FWorldState = AValue then Exit;
+  FWorldState := AValue;
+end;
 
 function TbWorld.QueryObjects(const AViewProj: TMat4): IbGameObjArr;
 var obj: TbGameObject;
@@ -505,6 +581,11 @@ begin
   //todo
   Assert(False);
   Result := nil;
+end;
+
+function TbWorld.UIObjects: IbGameObjSet;
+begin
+  Result := FUIObjects;
 end;
 
 procedure TbWorld.UpdateStep;
@@ -544,6 +625,7 @@ begin
   FToDestroy  := TbGameObjSet.Create();
   FUpdateSubs := TbGameObjSet.Create();
   FTempObjs   := TbGameObjArr.Create();
+  FUIObjects  := TbGameObjSet.Create();
 
   FRenderer := TbWorldRenderer.Create(Self);
 end;
