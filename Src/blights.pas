@@ -827,7 +827,7 @@ begin
   pld^.Color := FColor;
   pld^.Dir := Vec(0,0,0);
   pld^.Angles := Vec(0,0);
-  if FCastShadows then
+  if FCastShadows and (AMain.ActiveApi <> apiDX11_WARP) then
   begin
     PPointLightMatrices(FMatrices.PItem[0])^.Init(Pos, Radius, AMain.Projection.DepthRange);
     FMatricesHandle := LightRenderer.FLightMatricesSB.Add(FMatrices as IVerticesData);

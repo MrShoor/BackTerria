@@ -34,7 +34,7 @@ float4x4 getCubeMatrix(float3 LightDir, int matIdx) {
 
 float _sampleCubeShadowRude(float3 Pt, Light light)
 {
-    if (light.ShadowSizeSliceRange.y < 0) return 0.0;
+    if (light.ShadowSizeSliceRange.y < 0) return 1.0;
     float3 cubeDir = Pt - light.PosRange.xyz;
     float4x4 m = getCubeMatrix(cubeDir, light.MatrixOffset);
     float4 projPt = mul(m, float4(Pt,1.0));
@@ -65,7 +65,7 @@ static const float2 ShadowHammerslayPts[SHADOW_SAMPLES_COUNT] = {
 };
 
 float _sampleCubeShadowPCF16(float3 Pt, Light light) {
-        if (light.ShadowSizeSliceRange.y < 0) return 0.0;
+        if (light.ShadowSizeSliceRange.y < 0) return 1.0;
         float3 L = Pt - light.PosRange.xyz;
         float3 Llen = length(L);
         
