@@ -27,7 +27,7 @@ uses
 {$IfDef FPC}
   {$R 'shaders\shaders.rc'}
 {$Else}
-  //{$R '..\Src\shaders\shaders.res'}
+  {$R 'shaders\shaders.res'}
 {$EndIf}
 
 type
