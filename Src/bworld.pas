@@ -290,6 +290,15 @@ procedure TbWorldRenderer.PrepareToDraw;
 begin
   UpdateVisibleObjects();
   UpdateAllModels();
+
+  Main.States.DepthTest := True;
+
+  Main.States.CullMode := cmFront;
+
+  FLightRenderer.Render(FShadowPassAdapter);
+
+  FGBuffer.FrameRect := RectI(Vec(0,0),Main.WindowSize);
+  FGBuffer.Select;
 end;
 
 procedure TbWorldRenderer.DrawWorld;
@@ -309,16 +318,6 @@ var sCubes: TSamplerInfo;
 begin
   sCubes := cSampler_Cubes;
   sCubes.Comparison := Main.States.DepthFunc;
-
-  Main.States.DepthTest := True;
-
-  Main.States.CullMode := cmFront;
-
-  FLightRenderer.Render(FShadowPassAdapter);
-
-  FGBuffer.FrameRect := RectI(Vec(0,0),Main.WindowSize);
-  FGBuffer.Select;
-  Main.Clear(Vec(0.0,0.2,0.4,1.0), True, Main.Projection.DepthRange.y, True);
 
   Main.States.CullMode := cmBack;
 
@@ -350,6 +349,12 @@ begin
   Main.States.DepthWrite := False;
   FModels.Draw(FAllEmissives);
   Main.States.DepthWrite := True;
+
+  if Main.ActiveApi = apiDX11_WARP then
+  begin
+    FGBuffer.BlitToWindow();
+    Exit;
+  end;
 
   FPostProcess.DoPostProcess(FGBuffer.GetColor(0), FGBuffer.GetColor(1), FGBuffer.GetDepth);
 
