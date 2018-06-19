@@ -72,8 +72,8 @@ float _sampleCubeShadowPCF16(float3 Pt, Light light) {
 	float3 SideVector = normalize(cross(L, float3(0, 0, 1))) * Llen;
 	float3 UpVector = normalize(cross(SideVector, L)) * Llen;
 
-	SideVector *= 1.0 / 32.0;
-	UpVector *= 1.0 / 32.0;
+	SideVector *= 1.0 / 128.0;
+	UpVector *= 1.0 / 128.0;
 
         float4x4 m = getCubeMatrix(L, light.MatrixOffset);
         float4 projPt = mul(m, float4(Pt,1.0));

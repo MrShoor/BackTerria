@@ -1075,7 +1075,7 @@ begin
   FRenderCluster_Prog := TavProgram.Create(Self);
   FRenderCluster_Prog.Load('Lighting_render_clusters', SHADERS_FROMRES, SHADERS_DIR);
 
-  FCubes512 := TavShadowTextures.Create(Self, 512, 6);
+  FCubes512 := TavShadowTextures.Create(Self, 1024, 6);
 
   FLightMatricesSB := TavSBManaged.Create(Self);
 end;

@@ -21,7 +21,7 @@ VS_Output VS(VS_Input In) {
 ///////////////////////////////////////////////////////////////////////////////
 
 #define SAMPLES_COUNT 16
-#define SSAO_RADIUS 1.0
+#define SSAO_RADIUS 0.5
 #define SSAO_BIAS SSAO_RADIUS * 0.1
 
 
@@ -55,13 +55,14 @@ Texture2D Depth; SamplerState DepthSampler;
 Texture2D Normals; SamplerState NormalsSampler;
 Texture2D RandomTex; SamplerState RandomTexSampler;
 
-float3 Get_vPos(int2 pixel) {
+float3 Get_vPos(int2 pixel, out bool inbounds) {
     float4 Out;
     Depth.GetDimensions(Out.x, Out.y);
     Out.xy = (pixel / Out.xy);
     Out.xy -= 0.5;
     Out.xy *= float2(2.0, -2.0); 
     Out.z = Depth.Load(int3(pixel,0)).r;
+    inbounds = (Out.z == 0) || (Out.z == 1);
     Out.w = 1.0;
     Out = mul(Out, P_InverseMatrix);
     return Out.xyz /= Out.w;
@@ -107,8 +108,10 @@ float SampleOcclusion(float3 vCoord){
 
 PS_Output PS(VS_Output In) {
     PS_Output Out;
+    Out.Color = Get_Color(In.Pos.xy);
     
-    float3 vPos = Get_vPos(In.Pos.xy);
+    bool inbounds;
+    float3 vPos = Get_vPos(In.Pos.xy, inbounds);
     float3 vNormal = Get_vNormal(In.Pos.xy);
     float3 SampleStart = vPos + vNormal * SSAO_BIAS;
     float3 rnd = Get_Random(In.Pos.xy);
@@ -121,9 +124,9 @@ PS_Output PS(VS_Output In) {
     }
     ssao = 1.0 - ssao/SAMPLES_COUNT;
     //ssao = pow(ssao, 2.2);
-    
-    Out.Color = Get_Color(In.Pos.xy);
-    Out.Color.rgb *= ssao;
+
+    if (!inbounds)
+        Out.Color.rgb *= ssao;
     //Out.Color = float4(ssao,ssao,ssao,1.0);
     
     return Out;
