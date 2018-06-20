@@ -19,15 +19,19 @@ type
   private
     FHammersleySphere: TVec4Arr;
     FResultFBO: TavFrameBuffer;
+
+    FBlurProgram: TavProgram;
     FPostProcess: TavProgram;
     FRandomTex: TavTexture;
+
+    FTempFBO16f: TavFrameBuffer;
     function GetResult0: TavTextureBase;
   protected
     procedure AfterRegister; override;
   public
     procedure InvalidateShaders;
 
-    procedure DoPostProcess(AColor, ANormal, ADepth: TavTextureBase);
+    procedure DoPostProcess(AGbuffer: TavFrameBuffer);
 
     property Result0: TavTextureBase read GetResult0;
     property ResultFBO: TavFrameBuffer read FResultFBO;
@@ -86,6 +90,8 @@ begin
 
   FPostProcess := TavProgram.Create(Self);
   FPostProcess.Load('PostProcess1', SHADERS_FROMRES, SHADERS_DIR);
+  FBlurProgram := TavProgram.Create(Self);
+  FBlurProgram.Load('Blur', SHADERS_FROMRES, SHADERS_DIR);
 
   FRandomTex := TavTexture.Create(Self);
   FRandomTex.TargetFormat := TTextureFormat.RGBA32f;
@@ -99,23 +105,60 @@ begin
     h.y := h.y*2*Pi;
     FHammersleySphere[i].xyz := Vec(sin(h.x) * cos(h.y), sin(h.x) * sin(h.y), cos(h.x));
   end;
+
+  FTempFBO16f := Create_FrameBuffer(Self, [TTextureFormat.RGBA16f], [false]);
 end;
 
 procedure TavPostProcess.InvalidateShaders;
 begin
   FPostProcess.Invalidate;
+  FBlurProgram.Invalidate;
 end;
 
-procedure TavPostProcess.DoPostProcess(AColor, ANormal, ADepth: TavTextureBase);
+procedure TavPostProcess.DoPostProcess(AGbuffer: TavFrameBuffer);
+var blurstep: Single;
+    Color, Normal, Depth: TavTextureBase;
 begin
-  FResultFBO.FrameRect := Main.States.Viewport;
+  Color := AGbuffer.GetColor(0);
+  Normal := AGbuffer.GetColor(1);
+  Depth := AGbuffer.GetDepth;
+
+  Main.States.SetBlendFunctions(bfOne, bfOne);
+  Main.States.DepthTest := False;
+
+  blurstep := 1/1024;
+  FTempFBO16f.FrameRect := AGbuffer.FrameRect;
+  FTempFBO16f.Select();
+  FTempFBO16f.Clear(0, Vec(0,0,0,0));
+  FBlurProgram.Select();
+  FBlurProgram.SetAttributes(nil, nil, nil);
+  FBlurProgram.SetUniform('Color', Color, Sampler_Linear_NoAnisotropy);
+  FBlurProgram.SetUniform('YLimit', 1.0);
+  FBlurProgram.SetUniform('Direction', Vec(0,blurstep));
+  FBlurProgram.SetUniform('ResultMult', 1.0);
+  FBlurProgram.Draw(ptTriangleStrip, cmNone, False, 0, 0, 4);
+
+  AGbuffer.Select();
+  Main.States.ColorMask[1] := [];
+  FBlurProgram.Select();
+  FBlurProgram.SetAttributes(nil, nil, nil);
+  FBlurProgram.SetUniform('Color', FTempFBO16f.GetColor(0), Sampler_Linear_NoAnisotropy);
+  FBlurProgram.SetUniform('YLimit', 0.0);
+  FBlurProgram.SetUniform('Direction', Vec(blurstep*AGbuffer.FrameRect.Size.x/AGbuffer.FrameRect.Size.y,0));
+  FBlurProgram.SetUniform('ResultMult', 0.3);
+  FBlurProgram.Draw(ptTriangleStrip, cmNone, False, 0, 0, 4);
+  Main.States.ColorMask[1] := AllChanells;
+
+  Main.States.SetBlendFunctions(bfSrcAlpha, bfInvSrcAlpha);
+
+  FResultFBO.FrameRect := AGbuffer.FrameRect;
   FResultFBO.Select;
 
   FPostProcess.Select();
-  FPostProcess.SetUniform('Color', AColor, Sampler_NoFilter);
-  FPostProcess.SetUniform('Normals', ANormal, Sampler_NoFilter);
-  FPostProcess.SetUniform('Depth', ADepth, Sampler_Depth);
-  FPostProcess.SetUniform('RandomTex', FRandomTex, Sampler_Linear);
+  FPostProcess.SetUniform('Color', Color, Sampler_NoFilter);
+  FPostProcess.SetUniform('Normals', Normal, Sampler_NoFilter);
+  FPostProcess.SetUniform('Depth', Depth, Sampler_Depth);
+  FPostProcess.SetUniform('RandomTex', FRandomTex, Sampler_Linear_NoAnisotropy);
   FPostProcess.SetUniform('uHammerslaySpherePts', FHammersleySphere);
   FPostProcess.Draw(ptTriangleStrip, cmNone, False, 0, 0, 4);
 end;

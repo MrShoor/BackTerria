@@ -239,6 +239,7 @@ begin
 end;
 
 procedure TbWorldRenderer.AfterRegister;
+var tex: TavTexture;
 begin
   inherited AfterRegister;
   FLightRenderer := TavLightRenderer.Create(Self);
@@ -247,7 +248,7 @@ begin
 
   FPostProcess := TavPostProcess.Create(Self);
 
-  FGBuffer := Create_FrameBuffer(Self, [TTextureFormat.RGBA, TTextureFormat.RGBA, TTextureFormat.D32f], [true, false, false]);
+  FGBuffer := Create_FrameBuffer(Self, [TTextureFormat.RGBA16f, TTextureFormat.RGBA, TTextureFormat.D32f], [false, false, false]);
 
   FModelsProgram := TavProgram.Create(Self);
   FModelsProgram.Load('avMesh', SHADERS_FROMRES, SHADERS_DIR);
@@ -364,18 +365,23 @@ begin
   //transparent first
   FModels.Draw(FAllTransparent);
   //emissive after
-  FModelsEmissionProgram.Select();
-  FModels.Select();
-  FModels.Draw(FAllEmissives);
-  Main.States.DepthWrite := True;
-
-  if Main.ActiveApi = apiDX11_WARP then
+  if Main.ActiveApi = apiDX11_WARP then //early exit for WARP devices
   begin
     FGBuffer.BlitToWindow();
     Exit;
   end;
+  Main.States.DepthFunc := cfGreaterEqual;
+  Main.States.ColorMask[1] := [];
+  Main.States.SetBlendFunctions(bfSrcAlpha, bfOne, 0);
+  FModelsEmissionProgram.Select();
+  FModels.Select();
+  FModels.Draw(FAllEmissives);
+  Main.States.SetBlendFunctions(bfSrcAlpha, bfInvSrcAlpha, 0);
+  Main.States.ColorMask[1] := AllChanells;
+  Main.States.DepthFunc := cfGreater;
+  Main.States.DepthWrite := True;
 
-  FPostProcess.DoPostProcess(FGBuffer.GetColor(0), FGBuffer.GetColor(1), FGBuffer.GetDepth);
+  FPostProcess.DoPostProcess(FGBuffer);
 
   FPostProcess.ResultFBO.BlitToWindow();
 end;

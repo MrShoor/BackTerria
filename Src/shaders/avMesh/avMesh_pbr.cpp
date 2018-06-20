@@ -55,8 +55,6 @@ PS_Output PS(VS_Output In) {
     float4 albedo = m.Diffuse_Color(In.vTex, m.Diff);
     float roughness = m.Geometry_Hardness(In.vTex, 0.5).x;
     float metallic = m.Specular_Intensity(In.vTex, 0.0).x;    
-    metallic = roughness;
-    roughness = 0.50;
     float3 F0;
     F0 = albedo.xyz * metallic;
     albedo.xyz *= (1.0 - metallic);    
@@ -64,58 +62,12 @@ PS_Output PS(VS_Output In) {
     
     float4 pCrd = In.pCoord;
     pCrd.xyz /= pCrd.w;    
-    Out.Color = Clustered_GGX(pCrd.xyz, In.vCoord, In.wCoord, norm, normalize(In.vCoord), albedo, 0.05, F0, roughness);
+    Out.Color = Clustered_GGX(pCrd.xyz, In.vCoord, In.wCoord, norm, normalize(In.vCoord), albedo, 0.2, F0, roughness);
     
     //Out.Color = float4(tonemapReinhard(Out.Color.xyz), Out.Color.a);
     //Out.Color.xyz = norm.xyz;
-    //Out.Color.xyz = F0;
     Out.Normal = PackNormal(norm);
     //Out.Color = diff;
     
-    return Out;
-}
-
-PS_Output PS_old(VS_Output In) {
-    PS_Output Out;
-    In.vNorm = normalize(In.vNorm);
-    
-    ModelMaterialDesc m = LoadMaterialDesc((int)In.MatIndex);
-    float3 norm = In.vNorm;
-    
-    if (m.mapSpecular_Hardness_mapGeometry_Normal.w > 0.001) {
-        float3x3 tbn = CalcTBN(In.vCoord, In.vNorm, In.vTex);
-        norm = UnpackNormal(m.Geometry_Normal(In.vTex, float4(0.5,0.5,1,0)));
-        norm = mul(norm, tbn);
-    }    
-    
-    float4 diff = m.Diffuse_Color(In.vTex, m.Diff);
-    //diff = pow(abs(diff), 2.2);
-    float roughness = m.Geometry_Hardness(In.vTex, 0.5).x;
-    float metallic = m.Specular_Intensity(In.vTex, 0.0).x;
-    
-    metallic = 1.0 - pow(abs(1.0-metallic), 32);
-    
-    float4 spec = {1,1,1,1};
-    float4 amb = 0.3;
-    float3 lightColor = {1,1,1};
-    float3 n = normalize(norm);
-    float3 viewDir = normalize(-In.vCoord);
-    
-    float3 F0;
-    F0 = diff.xyz * metallic;
-    diff.xyz *= (1.0 - metallic);
-    
-    //float3 c = PhongColor(n, viewDir, viewDir, lightColor, diff, spec, amb, 20.0).rgb;
-    //float3 LightPos = float3(10, 0, 0);
-    //float3 LightDir = normalize(LightPos - In.vCoord);
-    //float3 H = normalize(LightDir + viewDir);
-    
-    //float3 c = CookTorrance_GGX(n, LightDir, viewDir, H, F0, diff.xyz, roughness)*5;
-    //float3 c = CookTorrance_GGX_sampled(n, viewDir, F0, diff.xyz, roughness)*LightInt;
-
-    //Out.Color = float4(tonemapReinhard(c), diff.a);
-    
-    //Out.Color = diff;
-    //Out.Color = -In.vNorm.z;
     return Out;
 }

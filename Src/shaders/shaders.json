@@ -46,6 +46,12 @@
             "Path":["postprocess"]
         },
         {
+            "Name" : "Blur",
+            "Vertex" : "blur.cpp",
+            "Fragment" : "blur.cpp",
+            "Path":["postprocess"]
+        },
+        {
             "Name" : "Lighting_render_clusters",
             "Compute" : "render_clusters.cpp",
             "Path":["clustered"]

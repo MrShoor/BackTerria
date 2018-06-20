@@ -52,6 +52,13 @@ struct ModelMaterialDesc {
             return BaseValue;
         }
     }
+    float4 Shading_Emit(float2 TexCoord, float4 BaseValue) {
+        if (mapShading_Ambient_Emit.y > 0.001) {
+            return lerp(BaseValue, Maps.Sample(MapsSampler, float3(TexCoord, mapShading_Ambient_Emit.x)), mapShading_Ambient_Emit.y);
+        } else {
+            return BaseValue;
+        }
+    }
 };
 
 ModelMaterialDesc LoadMaterialDesc(int MatIndex) {

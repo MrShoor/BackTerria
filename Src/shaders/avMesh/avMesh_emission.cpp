@@ -29,6 +29,6 @@ struct PS_Output {
 PS_Output PS(VS_Output In) {
     PS_Output Out;
     ModelMaterialDesc m = LoadMaterialDesc((int)In.MatIndex);    
-    Out.Color = m.Diffuse_Color(In.vTex, m.Diff);
+    Out.Color = m.Shading_Emit(In.vTex, m.Diff) * m.Hardness_IOR_EmitFactor.z * 10.0;
     return Out;
 }
