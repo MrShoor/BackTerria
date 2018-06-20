@@ -370,15 +370,15 @@ begin
     FGBuffer.BlitToWindow();
     Exit;
   end;
-  Main.States.DepthFunc := cfGreaterEqual;
-  Main.States.ColorMask[1] := [];
-  Main.States.SetBlendFunctions(bfSrcAlpha, bfOne, 0);
-  FModelsEmissionProgram.Select();
-  FModels.Select();
-  FModels.Draw(FAllEmissives);
-  Main.States.SetBlendFunctions(bfSrcAlpha, bfInvSrcAlpha, 0);
-  Main.States.ColorMask[1] := AllChanells;
-  Main.States.DepthFunc := cfGreater;
+  //Main.States.DepthFunc := cfGreaterEqual;
+  //Main.States.ColorMask[1] := [];
+  //Main.States.SetBlendFunctions(bfSrcAlpha, bfOne, 0);
+  //FModelsEmissionProgram.Select();
+  //FModels.Select();
+  //FModels.Draw(FAllEmissives);
+  //Main.States.SetBlendFunctions(bfSrcAlpha, bfInvSrcAlpha, 0);
+  //Main.States.ColorMask[1] := AllChanells;
+  //Main.States.DepthFunc := cfGreater;
   Main.States.DepthWrite := True;
 
   FPostProcess.DoPostProcess(FGBuffer);
