@@ -124,6 +124,7 @@ type
     FGBuffer: TavFrameBuffer;
 
     FModelsProgram: TavProgram;
+    FModelsPBRProgram: TavProgram;
     FModelsShadowProgram: TavProgram;
     FModelsEmissionProgram: TavProgram;
     FModels: TavModelCollection;
@@ -135,6 +136,7 @@ type
     procedure AfterRegister; override;
   protected
     FAllModels: IavModelInstanceArr;
+    FAllTransparent: IavModelInstanceArr;
     FAllEmissives: IavModelInstanceArr;
     FVisibleObjects: IbGameObjArr;
     procedure UpdateVisibleObjects;
@@ -190,6 +192,8 @@ type
   end;
 
 implementation
+
+uses avTexLoader;
 
 var gvCounter: Int64;
 
@@ -247,6 +251,8 @@ begin
 
   FModelsProgram := TavProgram.Create(Self);
   FModelsProgram.Load('avMesh', SHADERS_FROMRES, SHADERS_DIR);
+  FModelsPBRProgram := TavProgram.Create(Self);
+  FModelsPBRProgram.Load('avMeshPBR', SHADERS_FROMRES, SHADERS_DIR);
   FModelsShadowProgram := TavProgram.Create(Self);
   FModelsShadowProgram.Load('avMesh_shadow', SHADERS_FROMRES, SHADERS_DIR);
   FModelsEmissionProgram := TavProgram.Create(Self);
@@ -256,6 +262,7 @@ begin
   FPrefabs := TavMeshInstances.Create();
 
   FAllModels := TavModelInstanceArr.Create();
+  FAllTransparent := TavModelInstanceArr.Create();
   FAllEmissives := TavModelInstanceArr.Create();
   FVisibleObjects := TbGameObjArr.Create();
 end;
@@ -270,10 +277,12 @@ var
   i: Integer;
 begin
   FAllModels.Clear();
+  FAllTransparent.Clear();
   FAllEmissives.Clear();
   for i := 0 to FVisibleObjects.Count - 1 do
   begin
     FVisibleObjects[i].WriteModels(FAllModels, mtDefault);
+    FVisibleObjects[i].WriteModels(FAllTransparent, mtTransparent);
     FVisibleObjects[i].WriteModels(FAllEmissives, mtEmissive);
   end;
 end;
@@ -283,6 +292,8 @@ begin
   FLightRenderer.InvalidateShaders;
   FPostProcess.InvalidateShaders;
   FModelsProgram.Invalidate;
+  FModelsPBRProgram.Invalidate;
+  FModelsEmissionProgram.Invalidate;
   FModelsShadowProgram.Invalidate;
 end;
 
@@ -315,22 +326,27 @@ const
       Comparison : cfGreater;
     );
 var sCubes: TSamplerInfo;
+    prog: TavProgram;
 begin
   sCubes := cSampler_Cubes;
   sCubes.Comparison := Main.States.DepthFunc;
 
   Main.States.CullMode := cmBack;
 
-  FModelsProgram.Select();
-  FModelsProgram.SetUniform('depthRange', Main.Projection.DepthRange);
-  FModelsProgram.SetUniform('planesNearFar', Vec(Main.Projection.NearPlane, Main.Projection.FarPlane));
-  FModelsProgram.SetUniform('lightCount', FLightRenderer.LightsCount*1.0);
-  FModelsProgram.SetUniform('light_list', FLightRenderer.LightsList);
-  FModelsProgram.SetUniform('light_headBufferSize', FLightRenderer.LightsHeadBuffer.Size*1.0);
-  FModelsProgram.SetUniform('light_headBuffer', FLightRenderer.LightsHeadBuffer, Sampler_NoFilter);
-  FModelsProgram.SetUniform('light_linkedList', FLightRenderer.LightsLinkedList);
-  FModelsProgram.SetUniform('light_matrices', FLightRenderer.LightMatrices);
-  FModelsProgram.SetUniform('ShadowCube512', FLightRenderer.Cubes512, sCubes);
+  if True then
+    prog := FModelsPBRProgram
+  else
+    prog := FModelsProgram;
+  prog.Select();
+  prog.SetUniform('depthRange', Main.Projection.DepthRange);
+  prog.SetUniform('planesNearFar', Vec(Main.Projection.NearPlane, Main.Projection.FarPlane));
+  prog.SetUniform('lightCount', FLightRenderer.LightsCount*1.0);
+  prog.SetUniform('light_list', FLightRenderer.LightsList);
+  prog.SetUniform('light_headBufferSize', FLightRenderer.LightsHeadBuffer.Size*1.0);
+  prog.SetUniform('light_headBuffer', FLightRenderer.LightsHeadBuffer, Sampler_NoFilter);
+  prog.SetUniform('light_linkedList', FLightRenderer.LightsLinkedList);
+  prog.SetUniform('light_matrices', FLightRenderer.LightMatrices);
+  prog.SetUniform('ShadowCube512', FLightRenderer.Cubes512, sCubes);
   FModels.Select();
 
   //depth prepass
@@ -344,9 +360,12 @@ begin
   Main.States.DepthFunc := cfGreater;
 
   //draw non depth objects
+  Main.States.DepthWrite := False;
+  //transparent first
+  FModels.Draw(FAllTransparent);
+  //emissive after
   FModelsEmissionProgram.Select();
   FModels.Select();
-  Main.States.DepthWrite := False;
   FModels.Draw(FAllEmissives);
   Main.States.DepthWrite := True;
 

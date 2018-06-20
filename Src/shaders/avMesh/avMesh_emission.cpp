@@ -1,10 +1,8 @@
 #include "hlsl.h"
 #include "matrices.h"
-#include "lighting.h"
 #include "avModelMaterials.h"
 #include "utils.h"
 #include "avMesh_common.h"
-#include "clustered_lighting.h"
 
 struct VS_Output {
     float4 Pos       : SV_Position;

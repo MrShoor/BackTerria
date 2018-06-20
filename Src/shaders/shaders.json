@@ -21,6 +21,12 @@
 	"Path"     :["avMesh"]
         },
         {
+        "Name"     : "avMeshPBR",
+	"Vertex"   : "avMesh_pbr.cpp",
+	"Fragment" : "avMesh_pbr.cpp",
+	"Path"     :["avMesh"]
+        },
+        {
         "Name"     : "avMesh_shadow",
 	"Vertex"   : "avMesh_shadow.cpp",
         "Geometry" : "avMesh_shadow.cpp",
