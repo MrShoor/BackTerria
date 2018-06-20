@@ -34,7 +34,7 @@ VS_Output VS(VS_Input In) {
 
 struct PS_Output {
     float4 Color : SV_Target0;
-    float4 Normal: SV_Target1;
+    //float4 Normal: SV_Target1;
 };
 
 static const float LightInt = 3;
@@ -58,7 +58,7 @@ PS_Output PS(VS_Output In) {
     pCrd.xyz /= pCrd.w;    
     //Out.Color = PhongColor(-norm, normalize(In.vCoord), normalize(In.vCoord), 0.5, diff, 1.0, 0.001, 80.0);
     Out.Color = Clustered_Phong(pCrd.xyz, In.vCoord, In.wCoord, norm, normalize(In.vCoord), diff, 0.5, 0.05, 80.0);
-    Out.Normal = PackNormal(norm);
+    //Out.Normal = PackNormal(norm);
     //Out.Color = diff;
     
     return Out;
