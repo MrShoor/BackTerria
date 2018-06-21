@@ -52,6 +52,7 @@ const
     Wrap_Y     : twClamp;
     Wrap_Z     : twClamp;
     Border     : (x: 1; y: 1; z: 1; w: 1);
+    Comparison : cfNever;
   );
 
 { TavPostProcess }

@@ -10,6 +10,9 @@
       <SearchPaths>
         <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
+      <Other>
+        <CustomOptions Value="-Oodfa"/>
+      </Other>
     </CompilerOptions>
     <Files Count="11">
       <Item1>
@@ -54,7 +57,7 @@
       </Item10>
       <Item11>
         <Filename Value="bminiparticles.pas"/>
-        <UnitName Value="bminiparticles"/>
+        <UnitName Value="bMiniParticles"/>
       </Item11>
     </Files>
     <RequiredPkgs Count="2">

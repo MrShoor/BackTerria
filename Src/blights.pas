@@ -906,6 +906,7 @@ var ld: TLightData;
 begin
   inherited Create(AParent);
   FLightIndex := LightRenderer.FLights.Add(Self);
+  ZeroClear(ld, SizeOf(ld));
   LightRenderer.FLightsData.Add(ld);
   LightRenderer.FLightsBuffer.Invalidate;
 end;

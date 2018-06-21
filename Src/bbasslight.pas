@@ -198,6 +198,7 @@ function TLightPlayer.TSoundStream3D.GetAttr3D: TSoundAttr3D;
 const BASSToMode: array [0..2] of TAttr3DMode = (amNormal, amRelative, amOff);
 var mode: Cardinal;
 begin
+  ZeroMemory(@Result, SizeOf(Result));
   if FChannel = 0 then Exit;
   mode := 0;
   ZeroMemory(@Result, SizeOf(Result));
@@ -209,6 +210,7 @@ end;
 function TLightPlayer.TSoundStream3D.GetPos3D: TSoundPos;
 var p, o, v: BASS_3DVECTOR;
 begin
+  ZeroMemory(@Result, SizeOf(Result));
   if FChannel = 0 then Exit;
   p.x :=  0; p.y := 0; p.z := 0;
   o.x :=  0; o.y := 0; o.z := 0;
