@@ -919,6 +919,7 @@ begin
 
   LightRenderer.FLights.DeleteWithSwap(FLightIndex);
   LightRenderer.FLightsData.DeleteWithSwap(FLightIndex);
+  LightRenderer.FInvalidLights.Delete(Self);
   l := LightRenderer.FLights[FLightIndex];
   l.FLightIndex := FLightIndex;
 end;
