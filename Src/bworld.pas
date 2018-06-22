@@ -122,6 +122,7 @@ type
     FParticles: TbParticleSystem;
 
     FGBuffer: TavFrameBuffer;
+    FEmissionFBO: TavFrameBuffer;
 
     FModelsProgram: TavProgram;
     FModelsPBRProgram: TavProgram;
@@ -250,6 +251,9 @@ begin
 
   //FGBuffer := Create_FrameBuffer(Self, [TTextureFormat.RGBA16f, TTextureFormat.RGBA, TTextureFormat.D32f], [false, false, false]);
   FGBuffer := Create_FrameBuffer(Self, [TTextureFormat.RGBA, TTextureFormat.D32f], [true, false]);
+  FEmissionFBO := Create_FrameBuffer(FGBuffer, [TTextureFormat.RGBA16f], [false]);
+  (FEmissionFBO.GetColor(0) as TavTexture).AutoGenerateMips := True;
+  FEmissionFBO.SetDepth(FGBuffer.GetDepth, 0);
 
   FModelsProgram := TavProgram.Create(Self);
   FModelsProgram.Load('avMesh', SHADERS_FROMRES, SHADERS_DIR);
@@ -365,9 +369,23 @@ begin
   Main.States.DepthWrite := False;
   //transparent first
   FModels.Draw(FAllTransparent);
+
+  Main.States.DepthFunc := cfGreaterEqual;
+  FEmissionFBO.FrameRect := FGBuffer.FrameRect;
+  FEmissionFBO.Select();
+  FEmissionFBO.Clear(0, Vec(0,0,0,0));
+  FModelsEmissionProgram.Select();
+  FModels.Select;
+  FModels.Draw(FAllEmissives);
+  Main.States.DepthFunc := cfGreater;
+
   Main.States.DepthWrite := True;
 
-  FGBuffer.BlitToWindow();
+  if Main.ActiveApi = apiDX11_WARP then
+    FGBuffer.BlitToWindow();
+
+  FPostProcess.DoComposeOnly(FGBuffer, FEmissionFBO);
+  FPostProcess.ResultFBO.BlitToWindow();
   {
   if Main.ActiveApi = apiDX11_WARP then //early exit for WARP devices
   begin
@@ -375,7 +393,6 @@ begin
     Main.States.DepthWrite := True;
     Exit;
   end;
-
 
   FPostProcess.DoPostProcess(FGBuffer);
 

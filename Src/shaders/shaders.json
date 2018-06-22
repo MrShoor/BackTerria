@@ -38,7 +38,13 @@
 	"Vertex"   : "avMesh_emission.cpp",
 	"Fragment" : "avMesh_emission.cpp",
 	"Path"     :["avMesh"]
-        }, 
+        },
+        {
+            "Name" : "StupidCompose",
+            "Vertex" : "stupid_compose.cpp",
+            "Fragment" : "stupid_compose.cpp",
+            "Path":["postprocess"]
+        },        
         {
             "Name" : "PostProcess1",
             "Vertex" : "post_process.cpp",

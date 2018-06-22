@@ -20,17 +20,20 @@ type
     FHammersleySphere: TVec4Arr;
     FResultFBO: TavFrameBuffer;
 
+    FStupidComposeProgram: TavProgram;
     FBlurProgram: TavProgram;
     FPostProcess: TavProgram;
     FRandomTex: TavTexture;
 
     FTempFBO16f: TavFrameBuffer;
+    FTempFBO16f_2: TavFrameBuffer;
     function GetResult0: TavTextureBase;
   protected
     procedure AfterRegister; override;
   public
     procedure InvalidateShaders;
 
+    procedure DoComposeOnly(AGbuffer: TavFrameBuffer; AEmissionBuffer: TavFrameBuffer);
     procedure DoPostProcess(AGbuffer: TavFrameBuffer);
 
     property Result0: TavTextureBase read GetResult0;
@@ -93,6 +96,8 @@ begin
   FPostProcess.Load('PostProcess1', SHADERS_FROMRES, SHADERS_DIR);
   FBlurProgram := TavProgram.Create(Self);
   FBlurProgram.Load('Blur', SHADERS_FROMRES, SHADERS_DIR);
+  FStupidComposeProgram := TavProgram.Create(Self);
+  FStupidComposeProgram.Load('StupidCompose', SHADERS_FROMRES, SHADERS_DIR);
 
   FRandomTex := TavTexture.Create(Self);
   FRandomTex.TargetFormat := TTextureFormat.RGBA32f;
@@ -108,12 +113,63 @@ begin
   end;
 
   FTempFBO16f := Create_FrameBuffer(Self, [TTextureFormat.RGBA16f], [false]);
+  FTempFBO16f_2 := Create_FrameBuffer(Self, [TTextureFormat.RGBA16f], [false]);
 end;
 
 procedure TavPostProcess.InvalidateShaders;
 begin
   FPostProcess.Invalidate;
   FBlurProgram.Invalidate;
+  FStupidComposeProgram.Invalidate;
+end;
+
+procedure TavPostProcess.DoComposeOnly(AGbuffer: TavFrameBuffer; AEmissionBuffer: TavFrameBuffer);
+var blurstep: Single;
+    emitsize: TVec2i;
+begin
+  Main.States.SetBlendFunctions(bfOne, bfOne);
+  Main.States.DepthTest := False;
+
+  blurstep := 1/1024;
+
+  emitsize := AEmissionBuffer.FrameRect.Size;
+  while (emitsize.x > 512) and (emitsize.y > 512) do
+  begin
+    emitsize.x := emitsize.x div 2;
+    emitsize.y := emitsize.y div 2;
+  end;
+
+  FTempFBO16f.FrameRect := RectI(0, 0, emitsize.x, emitsize.y);
+  FTempFBO16f.Select();
+  FTempFBO16f.Clear(0, Vec(0,0,0,0));
+  FBlurProgram.Select();
+  FBlurProgram.SetAttributes(nil, nil, nil);
+  FBlurProgram.SetUniform('Color', AEmissionBuffer.GetColor(0), Sampler_Linear_NoAnisotropy);
+  FBlurProgram.SetUniform('YLimit', 0.0);
+  FBlurProgram.SetUniform('Direction', Vec(0,blurstep));
+  FBlurProgram.SetUniform('ResultMult', 1.0);
+  FBlurProgram.Draw(ptTriangleStrip, cmNone, False, 0, 0, 4);
+
+  FTempFBO16f_2.FrameRect := FTempFBO16f.FrameRect;
+  FTempFBO16f_2.Select();
+  FTempFBO16f_2.Clear(0, Vec(0,0,0,0));
+  FBlurProgram.Select();
+  FBlurProgram.SetAttributes(nil, nil, nil);
+  FBlurProgram.SetUniform('Color', FTempFBO16f.GetColor(0), Sampler_Linear_NoAnisotropy);
+  FBlurProgram.SetUniform('Direction', Vec(blurstep, 0));
+  FBlurProgram.SetUniform('ResultMult', 1.0);
+  FBlurProgram.Draw(ptTriangleStrip, cmNone, False, 0, 0, 4);
+
+  Main.States.SetBlendFunctions(bfSrcAlpha, bfInvSrcAlpha);
+
+  FResultFBO.FrameRect := AGbuffer.FrameRect;
+  FResultFBO.Select;
+
+  FStupidComposeProgram.Select();
+  FStupidComposeProgram.SetUniform('Color', AGbuffer.GetColor(0), Sampler_NoFilter);
+  FStupidComposeProgram.SetUniform('Emission', FTempFBO16f_2.GetColor(0), Sampler_Linear_NoAnisotropy);
+
+  FStupidComposeProgram.Draw(ptTriangleStrip, cmNone, False, 0, 0, 4);
 end;
 
 procedure TavPostProcess.DoPostProcess(AGbuffer: TavFrameBuffer);
