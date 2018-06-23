@@ -55,12 +55,6 @@ type
     function SizeSliceRange: TVec3i;
   end;
 
-  IMatricesHandle = interface
-    procedure Invalidate;
-    function  Mat  : PMat4;
-    function  Count: Integer;
-  end;
-
   IGeometryRenderer = interface
     procedure ShadowPassGeometry(const ALight: TavLightSource; const ALightData: TLightData);
     procedure DrawTransparentGeometry();

@@ -228,7 +228,13 @@ procedure TbWork.Render;
 begin
   if Main.Bind then
   try
+    Main.States.DepthTest := True;
+    Main.States.DepthWrite := True;
+    Main.States.DepthFunc := cfGreater;
+    Main.Projection.DepthRange := Vec(1,0);
+
     FWorld.Renderer.PrepareToDraw;
+    Main.Clear(Vec(0,0,0,0), true, Main.Projection.DepthRange.y, true);
     FWorld.Renderer.DrawWorld;
     Main.Present;
   finally
