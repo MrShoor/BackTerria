@@ -171,6 +171,7 @@ type
 
     FRenderer : TbWorldRenderer;
     FSndPlayer: ILightPlayer;
+    function GetGameTime: Int64;
     procedure SetWorldState(const AValue: TbGameObject);
   public
     property Renderer : TbWorldRenderer read FRenderer;
@@ -181,7 +182,7 @@ type
     function QueryObjects(const ARay: TLine): IbGameObjArr; overload;
     function UIObjects: IbGameObjSet;
 
-    property GameTime: Int64 read FTimeTick;
+    property GameTime: Int64 read GetGameTime;
 
     procedure UpdateStep();
     procedure SafeDestroy(const AObj: TbGameObject);
@@ -616,6 +617,11 @@ procedure TbWorld.SetWorldState(const AValue: TbGameObject);
 begin
   if FWorldState = AValue then Exit;
   FWorldState := AValue;
+end;
+
+function TbWorld.GetGameTime: Int64;
+begin
+  Result := FTimeTick * Main.UpdateStatesInterval;
 end;
 
 function TbWorld.QueryObjects(const AViewProj: TMat4): IbGameObjArr;
