@@ -57,28 +57,47 @@ Frustum BuildFrustum(float3 boundmin, float3 boundmax) {
     return Out;
 }
 
-bool PointLightInFrustum(Light light, Frustum f) {
+float3 PointLineProjection(float3 pt, float3 ro, float3 rd_n) {
+    float cs = dot(pt-ro, rd_n);
+    return ro + rd_n * cs;
+}
+
+float4 GetSplitPlane(Light l, float3 pt) {
+    float4 pl;
+    float3 ptDir = pt - l.PosRange.xyz;
+    float ptDirLen = length(ptDir);
+    float dot_ptDir_lDir = dot(ptDir, l.Dir);
+    if ( dot_ptDir_lDir >= l.Angles.y*ptDirLen ) { //point case
+        pl.xyz = normalize(pt - l.PosRange.xyz);
+        pl.w = -dot(pl.xyz, l.PosRange.xyz + pl.xyz*l.PosRange.w);        
+    } else { //cone side case
+        float3 pp = PointLineProjection(pt, l.PosRange.xyz, l.Dir);
+        float a = length(pp - l.PosRange.xyz);
+        float tn = sqrt( saturate(1.0 - l.Angles.y*l.Angles.y) ) / l.Angles.y;
+        float b = a * tn;
+        float3 p1 = pp + normalize(pt - pp)*b;
+        float b2 = b * tn;
+        float3 p2 = pp + l.Dir * b2;
+        pl.xyz = normalize(p1 - p2);
+        pl.w = -dot(pl.xyz, l.PosRange.xyz);
+    }
+    return pl;
+}
+
+bool LightInFrustum(Light light, Frustum f) {
     uint i;
     uint j;
     for (i = 0; i < 6; i++) {
         if (dot(f.plane[i].xyz, light.PosRange.xyz) + f.plane[i].w > light.PosRange.w) return false;
     }
     for (i = 0; i < 8; i++) {
-        float4 pl;
-        pl.xyz = normalize(f.pts[i] - light.PosRange.xyz);
-        pl.w = -dot(pl.xyz, light.PosRange.xyz + pl.xyz*light.PosRange.w);
+        float4 pl = GetSplitPlane(light, f.pts[i]);
         for (j = 0; j < 8; j++) {
             if (dot(f.pts[j], pl.xyz)+pl.w < 0) break;
         }
         if (j == 8) return false;
     }
     return true;
-}
-
-bool LightInFrustum(Light light, Frustum f) {
-    if (dot(light.Dir, light.Dir) == 0)
-        return PointLightInFrustum(light, f);
-    return false;
 }
 
 [numthreads(8, 8, 8)]

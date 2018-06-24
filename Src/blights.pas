@@ -195,7 +195,7 @@ type
     FDir: TVec3;
     FPos: TVec3;
     FRadius: Single;
-    procedure SetAngles(const AValue: TVec2);
+    procedure SetAngles(AValue: TVec2);
     procedure SetColor(const AValue: TVec3);
     procedure SetDir(const AValue: TVec3);
     procedure SetPos(const AValue: TVec3);
@@ -442,42 +442,89 @@ end;
 
 { TavSpotLight }
 
-procedure TavSpotLight.SetAngles(const AValue: TVec2);
+procedure TavSpotLight.SetAngles(AValue: TVec2);
 begin
+  AValue.x := Clamp(AValue.x, EPS, Pi - EPS);
+  AValue.y := Clamp(AValue.y, EPS, Pi - EPS);
   if FAngles = AValue then Exit;
   FAngles := AValue;
+  InvalidateLight;
 end;
 
 procedure TavSpotLight.SetColor(const AValue: TVec3);
 begin
   if FColor = AValue then Exit;
   FColor := AValue;
+  InvalidateLight;
 end;
 
 procedure TavSpotLight.SetDir(const AValue: TVec3);
 begin
+  if LenSqr(AValue) = 0 then Exit;
   if FDir = AValue then Exit;
   FDir := AValue;
+  InvalidateLight;
 end;
 
 procedure TavSpotLight.SetPos(const AValue: TVec3);
 begin
   if FPos = AValue then Exit;
   FPos := AValue;
+  InvalidateLight;
 end;
 
 procedure TavSpotLight.SetRadius(const AValue: Single);
 begin
   if FRadius = AValue then Exit;
   FRadius := AValue;
+  InvalidateLight;
 end;
 
 procedure TavSpotLight.ValidateLight(const AMain: TavMainRender);
-  function BuildMatrix: TShadowMatrix;
+
+  function GetProjMatrix(const AFov, ARad: Single; const ADepthRange: TVec2): TMat4;
+  var h, Q: Single;
+      DepthSize: Single;
+      NearPlane, FarPlane: Single;
   begin
-    //todo
-    Assert(False);
-    Result.viewProj := IdentityMat4;
+    FarPlane := ARad;
+    NearPlane := FarPlane / 1000;
+    h := (cos(AFov/2)/sin(AFov/2));
+    Q := 1.0/(NearPlane - FarPlane);
+    DepthSize := ADepthRange.y - ADepthRange.x;
+
+    ZeroClear(Result, SizeOf(Result));
+    Result.f[0, 0] := h;
+    Result.f[1, 1] := h;
+    Result.f[2, 2] := ADepthRange.x - DepthSize * FarPlane * Q;
+    Result.f[2, 3] := 1.0;
+    Result.f[3, 2] := DepthSize * NearPlane * FarPlane * Q;
+  end;
+
+  function BuildMatrix: TShadowMatrix;
+  var mRot: TMat3;
+      mView: TMat4;
+      mProj: TMat4;
+  begin
+    mRot.Row[2] := normalize(Dir);
+    mRot.Row[0] := Cross(Dir, Vec(1,0,0));
+    if LenSqr(mRot.Row[0]) < 0.01 then
+    begin
+      mRot.Row[0] := Cross(Dir, Vec(0,1,0));
+      if LenSqr(mRot.Row[0]) < 0.01 then
+        mRot.Row[0] := Cross(Dir, Vec(0,0,1));
+    end;
+    mRot.Row[0] := normalize(mRot.Row[0]);
+    mRot.Row[1] := Cross(mRot.Row[2], mRot.Row[0]);
+    mRot := Transpose(mRot);
+
+    mView := IdentityMat4;
+    mView.OX := mRot.Row[0];
+    mView.OY := mRot.Row[1];
+    mView.OZ := mRot.Row[2];
+    mView.Pos := -Pos;
+
+    Result.viewProj := mView * GetProjMatrix(FAngles.y, FRadius, AMain.Projection.DepthRange);
   end;
 var pld: PLightData;
 begin
@@ -485,8 +532,8 @@ begin
   pld := LightRenderer.FLightsData.PItem[FLightIndex];
   pld^.PosRange := Vec(FPos, FRadius);
   pld^.Color := FColor;
-  pld^.Dir := FDir;
-  pld^.Angles := FAngles;
+  pld^.Dir := normalize(FDir);
+  pld^.Angles := Vec(cos(FAngles.x*0.5), cos(FAngles.y*0.5));
   if FCastShadows then
   begin
     FMatrices.Item[0] := BuildMatrix;
@@ -506,6 +553,7 @@ begin
   inherited AfterConstruction;
   FMatrices := TShadowMatrixArr.Create();
   FMatrices.SetSize(1);
+  FDir := Vec(0,-1,0);
 end;
 
 { TavPointLightAdapter }
@@ -979,9 +1027,7 @@ end;
 
 function TavLightRenderer.AddSpotLight: IavSpotLight;
 begin
-  //todo
-  Assert(False);
-  Result := nil;
+  Result := TavSpotLightAdapter.Create(TavSpotLight.Create(Self));
 end;
 
 function TavLightRenderer.LightsCount: Integer;

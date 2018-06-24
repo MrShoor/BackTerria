@@ -149,6 +149,8 @@ type
     procedure DrawWorld;
 
     function CreatePointLight(): IavPointLight;
+    function CreateSpotLight(): IavSpotLight;
+
     function CreateModelInstances(const ANames: array of string): IavModelInstanceArr;
     function Particles: TbParticleSystem;
 
@@ -404,6 +406,11 @@ end;
 function TbWorldRenderer.CreatePointLight: IavPointLight;
 begin
   Result := FLightRenderer.AddPointLight();
+end;
+
+function TbWorldRenderer.CreateSpotLight: IavSpotLight;
+begin
+  Result := FLightRenderer.AddSpotLight();
 end;
 
 function TbWorldRenderer.CreateModelInstances(const ANames: array of string): IavModelInstanceArr;

@@ -227,15 +227,26 @@ float4 Clustered_GGX(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 Nor
 
         float3 l = light.PosRange.xyz - WorldPos;
         float dist = length(l);
-        l = mul(float4(l/dist,0), V_Matrix).xyz;
-        float3 h = normalize(l + v);
-        float atten = saturate(1.0 - ((dist * dist) / (light.PosRange.w * light.PosRange.w)));
+        l /= dist;
+        float cs_angle_over = saturate(-dot(l, light.Dir) - light.Angles.y);
         
-        atten *= _sampleCubeShadowPCF16(WorldPos, light);
+        l = mul(float4(l,0), V_Matrix).xyz;
+        float3 h = normalize(l + v);
+        float atten = saturate(1.0 - ((dist * dist) / (light.PosRange.w * light.PosRange.w))); //distance attenuation
+        if (light.Angles.y) {
+            atten *= cs_angle_over==0 ? 0 : saturate(cs_angle_over / (light.Angles.x - light.Angles.y)); //angle attenuation
+            //atten *= _sampleShadowPCF16(WorldPos, light);
+        } else {
+            atten *= _sampleCubeShadowPCF16(WorldPos, light);
+        }
         
         Out.xyz += CookTorrance_GGX(Normal, l, v, h, F0, Albedo.xyz, roughness)*light.Color*atten;
-    }
+        //Out.y += 0.01;
         
+        //return Out;
+    }
+    
+    //Out.xyz = 0.0;
     return Out;
 }
 

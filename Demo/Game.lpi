@@ -138,6 +138,7 @@
       <Unit4>
         <Filename Value="bwork.pas"/>
         <IsPartOfProject Value="True"/>
+        <UnitName Value="bWork"/>
       </Unit4>
     </Units>
   </ProjectOptions>

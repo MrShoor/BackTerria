@@ -16,7 +16,8 @@ type
 
   TbLighter = class (TbGameObject)
   private
-    FLightSources: array of IavPointLight;
+    FPointLightSources: array of IavPointLight;
+    FSpotLightSources: array of IavSpotLight;
     FModelSphere: IavModelInstance;
   protected
     procedure SetPos(const AValue: TVec3); override;
@@ -143,13 +144,20 @@ end;
 procedure TbLighter.AfterRegister;
 begin
   inherited AfterRegister;
-  SetLength(FLightSources, 1);
-  FLightSources[0] := World.Renderer.CreatePointLight();
-//  FLightSources[0].Pos := Vec(14, 10, 0);
-//  FLightSources[0].Pos := Vec(0, 0, 0);
-  FLightSources[0].Radius := 230;
-  FLightSources[0].Color := Vec(1,1,1);
-  FLightSources[0].CastShadows := True;
+//  SetLength(FPointLightSources, 1);
+//  FPointLightSources[0] := World.Renderer.CreatePointLight();
+////  FPointLightSources[0].Pos := Vec(14, 10, 0);
+////  FPointLightSources[0].Pos := Vec(0, 0, 0);
+//  FPointLightSources[0].Radius := 20;
+//  FPointLightSources[0].Color := Vec(1,1,1);
+//  FPointLightSources[0].CastShadows := True;
+
+  SetLength(FSpotLightSources, 1);
+  FSpotLightSources[0] := World.Renderer.CreateSpotLight();
+  FSpotLightSources[0].Radius := 20;
+  FSpotLightSources[0].Color := Vec(1,1,1);
+  FSpotLightSources[0].Dir := Vec(-1,-1,0);
+  FSpotLightSources[0].Angles := Vec(Pi*0.25*0, Pi*0.25);
 
   Pos := Vec(14, 10, 0);
 
@@ -160,9 +168,12 @@ procedure TbLighter.SetPos(const AValue: TVec3);
 var i: Integer;
 begin
   inherited;
-  for i := 0 to Length(FLightSources) - 1 do
-    if Assigned(FLightSources[i]) then
-      FLightSources[i].Pos := Pos;
+  for i := 0 to Length(FPointLightSources) - 1 do
+    if Assigned(FPointLightSources[i]) then
+      FPointLightSources[i].Pos := Pos;
+  for i := 0 to Length(FSpotLightSources) - 1 do
+    if Assigned(FSpotLightSources[i]) then
+      FSpotLightSources[i].Pos := Pos;
 end;
 
 procedure TbLighter.WriteModels(const ACollection: IavModelInstanceArr; AType: TModelType);
@@ -268,7 +279,7 @@ begin
   FAnimatedLighter := TbAnimatedLighter.Create(FWorld);
 
   Main.Projection.NearPlane := 1;
-  Main.Projection.FarPlane := 200;
+  Main.Projection.FarPlane := 100;
 
   FFPVCamera := TbFPVCamera.Create(Self);
   FFPVCamera.Pos := Vec(-22, 5, 1);
