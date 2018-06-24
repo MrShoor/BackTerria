@@ -8,8 +8,8 @@ unit BackTerria;
 interface
 
 uses
-  bWorld, bTypes, bLevel, bWork, bFPVCamera, bLights, bPostProcess, bUtils, 
-  bBassLight, bMiniParticles, LazarusPackageIntf;
+  bWorld, bTypes, bFPVCamera, bLights, bPostProcess, bUtils, bBassLight, 
+  bMiniParticles, LazarusPackageIntf;
 
 implementation
 

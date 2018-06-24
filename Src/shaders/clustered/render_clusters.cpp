@@ -57,7 +57,7 @@ Frustum BuildFrustum(float3 boundmin, float3 boundmax) {
     return Out;
 }
 
-bool LightInFrustum(Light light, Frustum f) {
+bool PointLightInFrustum(Light light, Frustum f) {
     uint i;
     uint j;
     for (i = 0; i < 6; i++) {
@@ -73,6 +73,12 @@ bool LightInFrustum(Light light, Frustum f) {
         if (j == 8) return false;
     }
     return true;
+}
+
+bool LightInFrustum(Light light, Frustum f) {
+    if (dot(light.Dir, light.Dir) == 0)
+        return PointLightInFrustum(light, f);
+    return false;
 }
 
 [numthreads(8, 8, 8)]

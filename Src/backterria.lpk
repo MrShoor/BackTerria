@@ -14,7 +14,7 @@
         <CustomOptions Value="-Oodfa"/>
       </Other>
     </CompilerOptions>
-    <Files Count="11">
+    <Files Count="9">
       <Item1>
         <Filename Value="bworld.pas"/>
         <UnitName Value="bWorld"/>
@@ -24,41 +24,33 @@
         <UnitName Value="bTypes"/>
       </Item2>
       <Item3>
-        <Filename Value="blevel.pas"/>
-        <UnitName Value="bLevel"/>
-      </Item3>
-      <Item4>
-        <Filename Value="bwork.pas"/>
-        <UnitName Value="bWork"/>
-      </Item4>
-      <Item5>
         <Filename Value="bfpvcamera.pas"/>
         <UnitName Value="bFPVCamera"/>
-      </Item5>
-      <Item6>
+      </Item3>
+      <Item4>
         <Filename Value="blights.pas"/>
         <UnitName Value="bLights"/>
-      </Item6>
-      <Item7>
+      </Item4>
+      <Item5>
         <Filename Value="bpostprocess.pas"/>
         <UnitName Value="bPostProcess"/>
-      </Item7>
-      <Item8>
+      </Item5>
+      <Item6>
         <Filename Value="butils.pas"/>
         <UnitName Value="bUtils"/>
-      </Item8>
-      <Item9>
+      </Item6>
+      <Item7>
         <Filename Value="bshaders.inc"/>
         <Type Value="Binary"/>
-      </Item9>
-      <Item10>
+      </Item7>
+      <Item8>
         <Filename Value="bbasslight.pas"/>
         <UnitName Value="bBassLight"/>
-      </Item10>
-      <Item11>
+      </Item8>
+      <Item9>
         <Filename Value="bminiparticles.pas"/>
         <UnitName Value="bMiniParticles"/>
-      </Item11>
+      </Item9>
     </Files>
     <RequiredPkgs Count="2">
       <Item1>
