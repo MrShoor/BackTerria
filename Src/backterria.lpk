@@ -14,7 +14,7 @@
         <CustomOptions Value="-Oodfa"/>
       </Other>
     </CompilerOptions>
-    <Files Count="9">
+    <Files Count="13">
       <Item1>
         <Filename Value="bworld.pas"/>
         <UnitName Value="bWorld"/>
@@ -51,6 +51,22 @@
         <Filename Value="bminiparticles.pas"/>
         <UnitName Value="bMiniParticles"/>
       </Item9>
+      <Item10>
+        <Filename Value="bphys.pas"/>
+        <UnitName Value="bphys"/>
+      </Item10>
+      <Item11>
+        <Filename Value="Newton.pas"/>
+        <UnitName Value="Newton"/>
+      </Item11>
+      <Item12>
+        <Filename Value="newtonpascal.inc"/>
+        <Type Value="Include"/>
+      </Item12>
+      <Item13>
+        <Filename Value="pascaldefines.inc"/>
+        <Type Value="Include"/>
+      </Item13>
     </Files>
     <RequiredPkgs Count="2">
       <Item1>
