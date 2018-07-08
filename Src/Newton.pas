@@ -64,7 +64,11 @@ interface
  {$IFDEF __USE_DOUBLE_PRECISION__}
   NEWTON_API = 'newtond.dll';
  {$ELSE}
-  NEWTON_API = 'newtonf.dll';
+  {$IfDef WIN64}
+    NEWTON_API = 'newtonf.dll';
+  {$Else}
+    NEWTON_API = 'newton_d.dll';
+  {$EndIf}
  {$ENDIF}
 {$ENDIF}
 
@@ -633,7 +637,7 @@ type
  function NewtonCreateSphere (const world : NewtonWorld; radius : dFloat; shapeID : Integer; const offsetMatrix : PdFloat) : NewtonCollision; cdecl; external NEWTON_API;
  function NewtonCreateBox (const world : NewtonWorld; dx : dFloat; dy : dFloat; dz : dFloat; shapeID : Integer; const offsetMatrix : PdFloat) : NewtonCollision; cdecl; external NEWTON_API;
  function NewtonCreateCone (const world : NewtonWorld; radius : dFloat; height : dFloat; shapeID : Integer; const offsetMatrix : PdFloat) : NewtonCollision; cdecl; external NEWTON_API;
- function NewtonCreateCapsule (const world : NewtonWorld; radius : dFloat; height : dFloat; shapeID : Integer; const offsetMatrix : PdFloat) : NewtonCollision; cdecl; external NEWTON_API;
+ function NewtonCreateCapsule (const world : NewtonWorld; radius0, radius1 : dFloat; height : dFloat; shapeID : Integer; const offsetMatrix : PdFloat) : NewtonCollision; cdecl; external NEWTON_API;
  function NewtonCreateCylinder (const world : NewtonWorld; radius : dFloat; height : dFloat; shapeID : Integer; const offsetMatrix : PdFloat) : NewtonCollision; cdecl; external NEWTON_API;
  function NewtonCreateTaperedCapsule (const world : NewtonWorld; radio0 : dFloat; radio1 : dFloat; height : dFloat; shapeID : Integer; const offsetMatrix : PdFloat) : NewtonCollision; cdecl; external NEWTON_API;
  function NewtonCreateTaperedCylinder (const world : NewtonWorld; radio0 : dFloat; radio1 : dFloat; height : dFloat; shapeID : Integer; const offsetMatrix : PdFloat) : NewtonCollision; cdecl; external NEWTON_API;
@@ -856,7 +860,7 @@ type
  function  NewtonCreateDynamicBody (const world : NewtonWorld; const collision : NewtonCollision; const matrix : PdFloat) : NewtonBody; cdecl; external NEWTON_API;
  function  NewtonCreateKinematicBody (const world : NewtonWorld; const collision : NewtonCollision; const matrix : PdFloat) : NewtonBody; cdecl; external NEWTON_API;
 
- procedure NewtonDestroyBody (const world : NewtonWorld; const body : NewtonBody); cdecl; external NEWTON_API;
+ procedure NewtonDestroyBody (const body : NewtonBody); cdecl; external NEWTON_API;
 
  function  NewtonBodyGetType (const body : NewtonBody) : Integer; cdecl; external NEWTON_API;
 
@@ -927,8 +931,9 @@ type
  function NewtonBodyGetJointRecursiveCollision (const body : NewtonBody) : Integer; cdecl; external NEWTON_API;
 
  procedure  NewtonBodyGetMatrix(const body : NewtonBody; matrix : PdFloat); cdecl; external NEWTON_API;
+ procedure  NewtonBodyGetPosition(const body : NewtonBody; pos : PdFloat); cdecl; external NEWTON_API;
  procedure  NewtonBodyGetRotation(const body : NewtonBody; rotation : PdFloat); cdecl; external NEWTON_API;
- procedure  NewtonBodyGetMassMatrix (const body : NewtonBody; mass : PdFloat; Ixx : PdFloat; Iyy : PdFloat; Izz : PdFloat); cdecl; external NEWTON_API;
+ procedure  NewtonBodyGetMass (const body : NewtonBody; mass : PdFloat; Ixx : PdFloat; Iyy : PdFloat; Izz : PdFloat); cdecl; external NEWTON_API;
  procedure  NewtonBodyGetInvMass(const body : NewtonBody; invMass : PdFloat; invIxx : PdFloat; invIyy : PdFloat; invIzz : PdFloat); cdecl; external NEWTON_API;
  procedure  NewtonBodyGetInertiaMatrix(const body : NewtonBody; inertiaMatrix : PdFloat); cdecl; external NEWTON_API;
  procedure  NewtonBodyGetInvInertiaMatrix(const body : NewtonBody; invInertiaMatrix : PdFloat); cdecl; external NEWTON_API;

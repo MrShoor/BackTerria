@@ -18,6 +18,7 @@ uses
   bPostProcess,
   bMiniParticles,
   bBassLight,
+  bPhys,
   avBase,
   avTypes,
   avMesh,
@@ -49,6 +50,8 @@ type
     FTransformInv: TMat4;
   protected
     procedure ValidateTransform; virtual;
+    function  GetPos: TVec3; virtual;
+    function  GetRot: TQuat; virtual;
     procedure SetBBox(const AValue: TAABB); virtual;
     procedure SetPos(const AValue: TVec3); virtual;
     procedure SetRot(const AValue: TQuat); virtual;
@@ -77,8 +80,8 @@ type
   public
     property World: TbWorld read FWorld;
 
-    property Pos  : TVec3  read FPos   write SetPos;
-    property Rot  : TQuat  read FRot   write SetRot;
+    property Pos  : TVec3  read GetPos write SetPos;
+    property Rot  : TQuat  read GetRot write SetRot;
     property Scale: Single read FScale write SetScale;
     property BBox : TAABB  read FBBox  write SetBBox;
 
@@ -94,10 +97,28 @@ type
   IbGameObjSet = {$IfDef FPC}specialize{$EndIf}IHashSet<TbGameObject>;
   TbGameObjClass = class of TbGameObject;
 
-  { TbStaticObject }
+  { TbPhysObject }
 
-  TbStaticObject = class (TbGameObject)
-  private
+  TbPhysObject = class (TbGameObject)
+  protected
+    FBody: IPhysBody;
+
+    function  GetPos: TVec3; override;
+    function  GetRot: TQuat; override;
+    procedure SetPos(const AValue: TVec3); override;
+    procedure SetRot(const AValue: TQuat); override;
+  protected
+    function CreatePhysBody: IPhysBody; virtual; abstract;
+  public
+    property Body: IPhysBody read FBody;
+    procedure AfterConstruction; override;
+  end;
+
+  { TbDynamicObject }
+
+  TbDynamicObject = class (TbPhysObject)
+  protected
+    procedure UpdateStep; override;
   public
     procedure AfterConstruction; override;
   end;
@@ -172,11 +193,14 @@ type
     FTimeTick: Int64;
 
     FRenderer : TbWorldRenderer;
+    FPhysics  : IPhysWorld;
     FSndPlayer: ILightPlayer;
+
     function GetGameTime: Int64;
     procedure SetWorldState(const AValue: TbGameObject);
   public
     property Renderer : TbWorldRenderer read FRenderer;
+    property Physics  : IPhysWorld read FPhysics;
     property SndPlayer: ILightPlayer read FSndPlayer;
 
     function QueryObjects(const AViewProj: TMat4): IbGameObjArr; overload;
@@ -201,6 +225,20 @@ uses avTexLoader;
 
 var gvCounter: Int64;
 
+{ TbDynamicObject }
+
+procedure TbDynamicObject.UpdateStep;
+begin
+  inherited UpdateStep;
+  FTransformValid := False;
+end;
+
+procedure TbDynamicObject.AfterConstruction;
+begin
+  inherited AfterConstruction;
+  SubscribeForUpdateStep;
+end;
+
 { TbWorldRenderer.TShadowPassAdapter }
 
 procedure TbWorldRenderer.TShadowPassAdapter.ShadowPassGeometry(
@@ -224,12 +262,45 @@ begin
   FOwner := AOwner;
 end;
 
-{ TbStaticObject }
+{ TbPhysObject }
 
-procedure TbStaticObject.AfterConstruction;
+function TbPhysObject.GetPos: TVec3;
+begin
+  if FBody <> nil then
+    Result := FBody.GetPos
+  else
+    Result := inherited;
+end;
+
+function TbPhysObject.GetRot: TQuat;
+begin
+  if FBody <> nil then
+    Result := FBody.GetRot
+  else
+    Result := inherited;
+end;
+
+procedure TbPhysObject.SetPos(const AValue: TVec3);
+begin
+  inherited SetPos(AValue);
+  if FBody <> nil then
+    FBody.Pos := AValue;
+end;
+
+procedure TbPhysObject.SetRot(const AValue: TQuat);
+begin
+  inherited SetRot(AValue);
+  if FBody <> nil then
+    FBody.Rot := AValue;
+end;
+
+procedure TbPhysObject.AfterConstruction;
 begin
   inherited AfterConstruction;
   FModels := TavModelInstanceArr.Create();
+  FBody := CreatePhysBody;
+  if FBody <> nil then
+    FBody.Transform := Transform();
 end;
 
 { TbWorldRenderer }
@@ -480,7 +551,7 @@ procedure TbGameObject.ValidateTransform;
 var i: Integer;
 begin
   if FTransformValid then Exit;
-  FTransform := MatScale(Vec(FScale, FScale, FScale)) * Mat4(FRot, FPos);
+  FTransform := MatScale(Vec(FScale, FScale, FScale)) * Mat4(Rot, Pos);
   FTransformInv := Inv(FTransform);
 
   for i := 0 to FModels.Count - 1 do
@@ -489,6 +560,16 @@ begin
     FEmissive[i].Mesh.Transform := FTransform;
   for i := 0 to FTransparent.Count - 1 do
     FTransparent[i].Mesh.Transform := FTransform;
+end;
+
+function TbGameObject.GetPos: TVec3;
+begin
+  Result := FPos;
+end;
+
+function TbGameObject.GetRot: TQuat;
+begin
+  Result := FRot;
 end;
 
 procedure TbGameObject.SubscribeForUpdateStep;
@@ -671,6 +752,8 @@ begin
   FUpdateSubs.Reset;
   while FUpdateSubs.Next(obj) do
     obj.UpdateStep;
+
+  FPhysics.UpdateStep(Main.UpdateStatesInterval);
 end;
 
 procedure TbWorld.SafeDestroy(const AObj: TbGameObject);
@@ -701,6 +784,7 @@ begin
   FUIObjects  := TbGameObjSet.Create();
 
   FRenderer := TbWorldRenderer.Create(Self);
+  FPhysics := Create_IPhysWorld();
   FSndPlayer:= GetLightPlayer;
 end;
 
