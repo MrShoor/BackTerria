@@ -14,7 +14,7 @@
         <CustomOptions Value="-Oodfa"/>
       </Other>
     </CompilerOptions>
-    <Files Count="13">
+    <Files Count="14">
       <Item1>
         <Filename Value="bworld.pas"/>
         <UnitName Value="bWorld"/>
@@ -67,6 +67,10 @@
         <Filename Value="pascaldefines.inc"/>
         <Type Value="Include"/>
       </Item13>
+      <Item14>
+        <Filename Value="bautocolliders.pas"/>
+        <UnitName Value="bautocolliders"/>
+      </Item14>
     </Files>
     <RequiredPkgs Count="2">
       <Item1>

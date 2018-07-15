@@ -769,7 +769,11 @@ type
 // Functions
 const
 {$IFDEF MSWINDOWS}
-  bassdll = 'bass.dll';
+  {$IfDef WIN64}
+    bassdll = 'bass.dll';
+  {$Else}
+    bassdll = 'bass32.dll';
+  {$EndIf}
 {$ENDIF}
 {$IFDEF LINUX}
   bassdll = 'libbass.so';

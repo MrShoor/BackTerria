@@ -18,7 +18,7 @@ uses
   bPostProcess,
   bMiniParticles,
   bBassLight,
-  bPhys,
+  bAutoColliders,
   avBase,
   avTypes,
   avMesh,
@@ -97,6 +97,28 @@ type
   IbGameObjSet = {$IfDef FPC}specialize{$EndIf}IHashSet<TbGameObject>;
   TbGameObjClass = class of TbGameObject;
 
+  { TbCollisionObject }
+
+  TbCollisionObject = class (TbGameObject)
+  protected
+    FDefaultCollider: ICollider;
+    FDefaultColliderOffset: TVec3;
+    function  GetPos: TVec3; override;
+    procedure SetPos(const AValue: TVec3); override;
+  public
+    property DefaultCollider: ICollider read FDefaultCollider;
+  end;
+
+  { TbDynamicCollisionObject }
+
+  TbDynamicCollisionObject = class (TbCollisionObject)
+  protected
+    procedure UpdateStep; override;
+  public
+    procedure AfterConstruction; override;
+  end;
+
+  (*
   { TbPhysObject }
 
   TbPhysObject = class (TbGameObject)
@@ -122,7 +144,7 @@ type
   public
     procedure AfterConstruction; override;
   end;
-
+  *)
   { TbWorldRenderer }
 
   TbWorldRenderer = class (TavMainRenderChild)
@@ -193,14 +215,16 @@ type
     FTimeTick: Int64;
 
     FRenderer : TbWorldRenderer;
-    FPhysics  : IPhysWorld;
+    FColliders: IAutoCollidersGroup;
+    //FPhysics  : IPhysWorld;
     FSndPlayer: ILightPlayer;
 
     function GetGameTime: Int64;
     procedure SetWorldState(const AValue: TbGameObject);
   public
     property Renderer : TbWorldRenderer read FRenderer;
-    property Physics  : IPhysWorld read FPhysics;
+    //property Physics  : IPhysWorld read FPhysics;
+    property Colliders: IAutoCollidersGroup read FColliders;
     property SndPlayer: ILightPlayer read FSndPlayer;
 
     function QueryObjects(const AViewProj: TMat4): IbGameObjArr; overload;
@@ -225,6 +249,83 @@ uses avTexLoader;
 
 var gvCounter: Int64;
 
+{ TbDynamicCollisionObject }
+
+procedure TbDynamicCollisionObject.UpdateStep;
+begin
+  inherited UpdateStep;
+  if FDefaultCollider <> nil then
+    FTransformValid := False;
+end;
+
+procedure TbDynamicCollisionObject.AfterConstruction;
+begin
+  inherited AfterConstruction;
+  SubscribeForUpdateStep;
+end;
+
+{ TbCollisionObject }
+
+function TbCollisionObject.GetPos: TVec3;
+begin
+  if FDefaultCollider <> nil then
+    Result := FDefaultCollider.Pos - FDefaultColliderOffset
+  else
+    Result := inherited;
+end;
+
+procedure TbCollisionObject.SetPos(const AValue: TVec3);
+begin
+  if FPos = AValue then Exit;
+  inherited SetPos(AValue);
+  if FDefaultCollider <> nil then
+    FDefaultCollider.Pos := AValue + FDefaultColliderOffset;
+end;
+
+(*
+{ TbPhysObject }
+
+function TbPhysObject.GetPos: TVec3;
+begin
+  if FBody <> nil then
+    Result := FBody.GetPos
+  else
+    Result := inherited;
+end;
+
+function TbPhysObject.GetRot: TQuat;
+begin
+  if FBody <> nil then
+    Result := FBody.GetRot
+  else
+    Result := inherited;
+end;
+
+procedure TbPhysObject.SetPos(const AValue: TVec3);
+begin
+  if FPos = AValue then Exit;
+  inherited SetPos(AValue);
+  if FBody <> nil then
+    FBody.Pos := AValue;
+end;
+
+procedure TbPhysObject.SetRot(const AValue: TQuat);
+begin
+  if FRot = AValue then Exit;
+  inherited SetRot(AValue);
+  if FBody <> nil then
+    FBody.Rot := AValue;
+end;
+
+procedure TbPhysObject.AfterConstruction;
+begin
+  inherited AfterConstruction;
+  FModels := TavModelInstanceArr.Create();
+  FBody := CreatePhysBody;
+  if FBody <> nil then
+    FBody.Transform := Transform();
+end;
+
 { TbDynamicObject }
 
 procedure TbDynamicObject.UpdateStep;
@@ -238,7 +339,7 @@ begin
   inherited AfterConstruction;
   SubscribeForUpdateStep;
 end;
-
+*)
 { TbWorldRenderer.TShadowPassAdapter }
 
 procedure TbWorldRenderer.TShadowPassAdapter.ShadowPassGeometry(
@@ -260,47 +361,6 @@ end;
 constructor TbWorldRenderer.TShadowPassAdapter.Create(AOwner: TbWorldRenderer);
 begin
   FOwner := AOwner;
-end;
-
-{ TbPhysObject }
-
-function TbPhysObject.GetPos: TVec3;
-begin
-  if FBody <> nil then
-    Result := FBody.GetPos
-  else
-    Result := inherited;
-end;
-
-function TbPhysObject.GetRot: TQuat;
-begin
-  if FBody <> nil then
-    Result := FBody.GetRot
-  else
-    Result := inherited;
-end;
-
-procedure TbPhysObject.SetPos(const AValue: TVec3);
-begin
-  inherited SetPos(AValue);
-  if FBody <> nil then
-    FBody.Pos := AValue;
-end;
-
-procedure TbPhysObject.SetRot(const AValue: TQuat);
-begin
-  inherited SetRot(AValue);
-  if FBody <> nil then
-    FBody.Rot := AValue;
-end;
-
-procedure TbPhysObject.AfterConstruction;
-begin
-  inherited AfterConstruction;
-  FModels := TavModelInstanceArr.Create();
-  FBody := CreatePhysBody;
-  if FBody <> nil then
-    FBody.Transform := Transform();
 end;
 
 { TbWorldRenderer }
@@ -752,8 +812,8 @@ begin
   FUpdateSubs.Reset;
   while FUpdateSubs.Next(obj) do
     obj.UpdateStep;
-
-  FPhysics.UpdateStep(Main.UpdateStatesInterval);
+  FColliders.UpdateStep;
+  //FPhysics.UpdateStep(Main.UpdateStatesInterval);
 end;
 
 procedure TbWorld.SafeDestroy(const AObj: TbGameObject);
@@ -784,7 +844,8 @@ begin
   FUIObjects  := TbGameObjSet.Create();
 
   FRenderer := TbWorldRenderer.Create(Self);
-  FPhysics := Create_IPhysWorld();
+  //FPhysics := Create_IPhysWorld();
+  FColliders := Create_IAutoCollidersGroup();
   FSndPlayer:= GetLightPlayer;
 end;
 

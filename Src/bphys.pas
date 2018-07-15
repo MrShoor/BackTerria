@@ -142,7 +142,7 @@ type
   protected
     property World: TPhysWorld read FWorld;
   public
-    constructor Create(const AWorld: TPhysWorld); virtual;
+    constructor Create(const AWorld: TPhysWorld); overload; virtual;
   end;
 
   { TCollider }
@@ -598,6 +598,7 @@ end;
 function TBody.GetRot: TQuat;
 begin
   NewtonBodyGetRotation(FHandle, @Result);
+  Result := Quat(Result.y, Result.z, Result.w, Result.x);
 end;
 
 function TBody.GetTransform: TMat4;
@@ -616,6 +617,18 @@ begin
 end;
 
 procedure TBody.SetTransform(const AValue: TMat4);
+  function TestOrtoghonal(const M: TMat4) : Boolean;
+  var n: TVec3;
+      a, b, c, d: Single;
+  begin
+    n := Cross(M.OY, M.OZ);
+    a := Dot(M.OX, M.OX) - 1;
+    b := Dot(M.OY, M.OY) - 1;
+    c := Dot(M.OZ, M.OZ) - 1;
+    d := Dot(n, M.OX) - 1;
+
+    Result := (abs(a) < 0.01) and (abs(b) < 0.01) and  (abs(c) < 0.01) and  (abs(d) < 0.01);
+  end;
 begin
   NewtonBodySetMatrix(FHandle, @AValue);
 end;
@@ -725,7 +738,7 @@ end;
 
 procedure TPhysWorld.UpdateStep(AIntervalMSec: Integer);
 begin
-  NewtonUpdate(FWorld, AIntervalMSec*1000); //todo async
+  NewtonUpdate(FWorld, AIntervalMSec/1000); //todo async
 end;
 
 constructor TPhysWorld.Create;
