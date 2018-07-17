@@ -279,7 +279,7 @@ begin
   if FPos = AValue then Exit;
   inherited SetPos(AValue);
   if FDefaultCollider <> nil then
-    FDefaultCollider.Pos := AValue + FDefaultColliderOffset;
+    FDefaultCollider.Pos := AValue - FDefaultColliderOffset;
 end;
 
 (*
@@ -812,7 +812,7 @@ begin
   FUpdateSubs.Reset;
   while FUpdateSubs.Next(obj) do
     obj.UpdateStep;
-  FColliders.UpdateStep;
+  FColliders.UpdateStep(Main.UpdateStatesInterval);
   //FPhysics.UpdateStep(Main.UpdateStatesInterval);
 end;
 

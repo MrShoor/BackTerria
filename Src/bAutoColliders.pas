@@ -24,10 +24,14 @@ type
 
   ICollider = interface
   ['{C0226B74-6AC8-4046-8127-748E266D3926}']
+    function  GetApplyGravity: Boolean;
     function  GetPos: TVec3;
+    function  GetVel: TVec3;
     function  GetUserData: Pointer;
     function  GetFilter: TOnCollisionFilter;
+    procedure SetApplyGravity(const AValue: Boolean);
     procedure SetPos(const AValue: TVec3);
+    procedure SetVel(const AValue: TVec3);
     procedure SetUserData(const AValue: Pointer);
     procedure SetFilter(const AValue: TOnCollisionFilter);
 
@@ -36,6 +40,8 @@ type
     function ColType: TColliderType;
 
     property Pos: TVec3 read GetPos write SetPos;
+    property Vel: TVec3 read GetVel write SetVel;
+    property ApplyGravity: Boolean read GetApplyGravity write SetApplyGravity;
     property UserData: Pointer read GetUserData write SetUserData;
 
     property Filter: TOnCollisionFilter read GetFilter write SetFilter;
@@ -98,9 +104,14 @@ type
     constructor Create(const ACallback: TOnAllCollisions);
   end;
 
+  { IAutoCollidersGroup }
+
   IAutoCollidersGroup = interface
   ['{BB240EB1-02CA-47D3-867F-A7BB6C85E54E}']
-    procedure UpdateStep;
+    function GetGravity: TVec3;
+    procedure SetGravity(const AValue: TVec3);
+
+    procedure UpdateStep(const AInterval: Integer);
 
     function Create_Box(const ASize, APos: TVec3; AType: TColliderType): ICollider_Box;
     function Create_Cylinder(ARadius, AHeight: Single; const APos: TVec3; AType: TColliderType): ICollider_Cylinder;
@@ -110,6 +121,8 @@ type
 
     procedure EnumColliders(const ABox: TAABB; const ACallback: TIteratorCallback); overload;
     function QueryColliders(const ABox: TAABB): IColliderArr; overload;
+
+    property Gravity: TVec3 read GetGravity write SetGravity;
   end;
 
 function Create_IAutoCollidersGroup: IAutoCollidersGroup;
@@ -137,15 +150,21 @@ type
 
   TCollider = class(TInterfacedObject, ICollider, ICollider_Internal)
   private
+    FApplyGravity: Boolean;
     FOwner: TAutoCollidersGroup;
     FPos: TVec3;
+    FVel: TVec3;
     FColType: TColliderType;
     FUserData: Pointer;
     FFilter: TOnCollisionFilter;
+    function  GetApplyGravity: Boolean;
     function  GetPos: TVec3;
+    function  GetVel: TVec3;
     function  GetUserData: Pointer;
     function  GetFilter: TOnCollisionFilter;
+    procedure SetApplyGravity(const AValue: Boolean);
     procedure SetPos(const AValue: TVec3);
+    procedure SetVel(const AValue: TVec3);
     procedure SetUserData(const AValue: Pointer);
     procedure SetFilter(const AValue: TOnCollisionFilter);
 
@@ -157,6 +176,8 @@ type
     function ColType: TColliderType;
 
     property Pos: TVec3 read GetPos write SetPos;
+    property Vel: TVec3 read GetVel write SetVel;
+    property ApplyGravity: Boolean read GetApplyGravity write SetApplyGravity;
   public
     constructor Create(AOwner: TAutoCollidersGroup; AType: TColliderType; const APos: TVec3); overload;
     destructor Destroy; override;
@@ -228,9 +249,11 @@ type
     end;
 
   private
+    FGravity: TVec3;
     FTree: ICollidersTree;
 
     FDynamicColliders: IColliderSet;
+    FSensorColliders: IColliderSet;
 
     FWakedColliders: IColliderSet;
     FOldWakedColliders: IColliderSet;
@@ -250,8 +273,11 @@ type
     FQueryResult: IColliderArr;
     procedure AddToQueryResult(const ACollider: ICollider);
   public
+    function GetGravity: TVec3;
+    procedure SetGravity(const AValue: TVec3);
+
     procedure AddToWake(const ACollider: TCollider);
-    procedure UpdateStep;
+    procedure UpdateStep(const AInterval: Integer);
     procedure ResolveCollisions;
 
     function Create_Box(const ASize, APos: TVec3; AType: TColliderType): ICollider_Box;
@@ -314,7 +340,7 @@ begin
   if push.x > r then Exit;
   push.z := push.z - bsize.z;
   if push.z > r then Exit;
-  if sqr(push.x) + sqr(push.z) > sqr(r) then Exit;
+  if sqr(max(0, push.x)) + sqr(max(0, push.z)) > sqr(r) then Exit;
 
   if push.x <= 0 then
   begin
@@ -493,7 +519,7 @@ end;
 function TCollider_Cylinder.AABB: TAABB;
 var v: TVec3;
 begin
-  v := Vec(FRadius, FRadius, FHeight*0.5);
+  v := Vec(FRadius, FHeight*0.5, FRadius);
   Result.min := FPos - v;
   Result.max := FPos + v;
 end;
@@ -544,9 +570,19 @@ end;
 
 { TCollider }
 
+function TCollider.GetApplyGravity: Boolean;
+begin
+  Result := FApplyGravity;
+end;
+
 function TCollider.GetPos: TVec3;
 begin
   Result := FPos;
+end;
+
+function TCollider.GetVel: TVec3;
+begin
+  Result := FVel;
 end;
 
 function TCollider.GetUserData: Pointer;
@@ -559,11 +595,22 @@ begin
   Result := FFilter;
 end;
 
+procedure TCollider.SetApplyGravity(const AValue: Boolean);
+begin
+  FApplyGravity := AValue;
+end;
+
 procedure TCollider.SetPos(const AValue: TVec3);
 begin
   if FPos = AValue then Exit;
   FPos := AValue;
   UpdateInTree;
+end;
+
+procedure TCollider.SetVel(const AValue: TVec3);
+begin
+  if FVel = AValue then Exit;
+  FVel := AValue;
 end;
 
 procedure TCollider.SetUserData(const AValue: Pointer);
@@ -583,7 +630,7 @@ end;
 
 procedure TCollider.UpdateInTree;
 begin
-  FOwner.FTree.Delete(Self);
+//  FOwner.FTree.Delete(Self);
   FOwner.FTree.Add(Self, AABB);
   FOwner.AddToWake(Self);
 end;
@@ -598,8 +645,13 @@ begin
   FOwner := AOwner;
   FColType := AType;
   FPos := APos;
-  if FColType = ctDynamic then
-    FOwner.FDynamicColliders.AddOrSet(Self);
+  case FColType of
+    ctDynamic: begin
+      FOwner.FDynamicColliders.AddOrSet(Self);
+      FApplyGravity := True;
+    end;
+    ctSensor : FOwner.FSensorColliders.AddOrSet(Self);
+  end;
 end;
 
 destructor TCollider.Destroy;
@@ -610,7 +662,10 @@ begin
     FOwner.FTree.Delete(Self);
     FOwner.FWakedColliders.Delete(Self);
     FOwner.FParticularCollidersPublisher.Delete(Self);
-    if ColType = ctDynamic then FOwner.FDynamicColliders.Delete(Self);
+    case FColType of
+      ctDynamic: FOwner.FDynamicColliders.Delete(Self);
+      ctSensor : FOwner.FSensorColliders.Delete(Self);
+    end;
   end;
 end;
 
@@ -620,7 +675,7 @@ procedure TAutoCollidersGroup.OnEnumNode(const ASender: IInterface; const ANode:
 var N: ICollidersTreeNode absolute ANode;
     i: Integer;
 begin
-  EnumChilds := Intersect(FQueryBox, FTree.AABB(ANode));
+  EnumChilds := True;//Intersect(FQueryBox, FTree.AABB(ANode));
   for i := 0 to N.ItemsCount - 1 do
     FQueryCallback(N.Item(i));
 end;
@@ -629,6 +684,8 @@ procedure TAutoCollidersGroup.ResolveCollision(const AOtherCollider: ICollider);
 var vThis, vOther: TVec3;
     thisI: ICollider;
     thisColType, otherColType: TColliderType;
+
+    s1, s2: string;
 begin
   thisI := FCurrentCollider;
   if AOtherCollider = thisI then Exit;
@@ -692,13 +749,43 @@ begin
   FQueryResult.Add(ACollider);
 end;
 
+function TAutoCollidersGroup.GetGravity: TVec3;
+begin
+  Result := FGravity;
+end;
+
+procedure TAutoCollidersGroup.SetGravity(const AValue: TVec3);
+begin
+  FGravity := AValue;
+end;
+
 procedure TAutoCollidersGroup.AddToWake(const ACollider: TCollider);
 begin
   FWakedColliders.AddOrSet(ACollider);
 end;
 
-procedure TAutoCollidersGroup.UpdateStep;
+procedure TAutoCollidersGroup.UpdateStep(const AInterval: Integer);
+var col: TCollider;
+    scaled_gravity: TVec3;
 begin
+  scaled_gravity := FGravity*(AInterval/1000);
+
+  FDynamicColliders.Reset;
+  while FDynamicColliders.Next(col) do
+  begin
+    if col.ApplyGravity then
+      col.Vel := col.Vel + scaled_gravity;
+    col.Pos := col.Pos + col.Vel;
+  end;
+
+  FSensorColliders.Reset;
+  while FSensorColliders.Next(col) do
+  begin
+    if col.ApplyGravity then
+      col.Vel := col.Vel + scaled_gravity;
+    col.Pos := col.Pos + col.Vel;
+  end;
+
   ResolveCollisions();
 end;
 
@@ -748,6 +835,9 @@ begin
     if Assigned(publisher) then publisher.OnCollision(ph^.col2);
     publisher := GetParticularPublisher(ph^.col2);
     if Assigned(publisher) then publisher.OnCollision(ph^.col1);
+
+    ph^.col1.Vel := ph^.col1.Vel - Projection(ph^.col1.Vel, ph^.dir1);
+    ph^.col2.Vel := ph^.col2.Vel - Projection(ph^.col2.Vel, ph^.dir2);
 
     ph^.col1.Pos := ph^.col1.Pos + ph^.dir1;
     ph^.col2.Pos := ph^.col2.Pos + ph^.dir2;
@@ -803,9 +893,11 @@ end;
 
 constructor TAutoCollidersGroup.Create;
 begin
+  FGravity := Vec(0,-0.0981, 0);
   FTree := TCollidersTree.Create(Vec(1,1,1));
 
   FDynamicColliders := TColliderSet.Create();
+  FSensorColliders := TColliderSet.Create();
 
   FWakedColliders := TColliderSet.Create();
   FOldWakedColliders := TColliderSet.Create();
