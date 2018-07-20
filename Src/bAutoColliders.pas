@@ -792,6 +792,8 @@ end;
 procedure TAutoCollidersGroup.AddHit(const AC1, AC2: ICollider; const ADir1, ADir2: TVec3);
 var hit: THit;
 begin
+  Assert(AC1 <> nil);
+  Assert(AC2 <> nil);
   hit.col1 := AC1;
   hit.col2 := AC2;;
   hit.dir1 := ADir1;
@@ -842,7 +844,9 @@ begin
     ph^.col1.Pos := ph^.col1.Pos + ph^.dir1;
     ph^.col2.Pos := ph^.col2.Pos + ph^.dir2;
   end;
+
   FHits.Clear();
+  FCurrentCollider := nil;
   FOldWakedColliders.Clear;
 end;
 
