@@ -675,7 +675,7 @@ procedure TAutoCollidersGroup.OnEnumNode(const ASender: IInterface; const ANode:
 var N: ICollidersTreeNode absolute ANode;
     i: Integer;
 begin
-  EnumChilds := True;//Intersect(FQueryBox, FTree.AABB(ANode));
+  EnumChilds := Intersect(FQueryBox, FTree.AABB(ANode));
   for i := 0 to N.ItemsCount - 1 do
     FQueryCallback(N.Item(i));
 end;

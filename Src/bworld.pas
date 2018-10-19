@@ -22,7 +22,8 @@ uses
   avBase,
   avTypes,
   avMesh,
-  avModel;
+  avModel,
+  avCanvas;
 
 {$I bshaders.inc}
 {$IfDef FPC}
@@ -50,6 +51,7 @@ type
     FTransformInv: TMat4;
   protected
     procedure ValidateTransform; virtual;
+    procedure InvalidateTransform; virtual;
     function  GetPos: TVec3; virtual;
     function  GetRot: TQuat; virtual;
     procedure SetBBox(const AValue: TAABB); virtual;
@@ -145,6 +147,40 @@ type
     procedure AfterConstruction; override;
   end;
   *)
+
+  { TbGraphicalObject }
+
+  TbGraphicalObject = class (TavMainRenderChild)
+  private
+    FPos: TVec3;
+    FCanvas: TavCanvas;
+    function GetPos: TVec3;
+    procedure SetPos(const AValue: TVec3);
+  protected
+    FWorld: TbWorld;
+    function CanRegister(target: TavObject): boolean; override;
+    procedure AfterRegister; override;
+  protected
+    FMarkedForDestroy : Boolean;
+    procedure UpdateStep; virtual;
+    procedure SafeDestroy;
+    property  MarkedForDestroy: Boolean read FMarkedForDestroy;
+  public
+    property World: TbWorld read FWorld;
+    property Pos  : TVec3 read GetPos write SetPos;
+
+    property Canvas: TavCanvas read FCanvas;
+
+    procedure Draw(); virtual;
+
+    procedure AfterConstruction; override;
+    destructor Destroy; override;
+  end;
+  TbGraphicalObjectArr = {$IfDef FPC}specialize{$EndIf}TArray<TbGraphicalObject>;
+  IbGraphicalObjectArr = {$IfDef FPC}specialize{$EndIf}IArray<TbGraphicalObject>;
+  TbGraphicalObjectSet = {$IfDef FPC}specialize{$EndIf}THashSet<TbGraphicalObject>;
+  IbGraphicalObjectSet = {$IfDef FPC}specialize{$EndIf}IHashSet<TbGraphicalObject>;
+
   { TbWorldRenderer }
 
   TbWorldRenderer = class (TavMainRenderChild)
@@ -183,10 +219,19 @@ type
     FAllTransparent: IavModelInstanceArr;
     FAllEmissives: IavModelInstanceArr;
     FVisibleObjects: IbGameObjArr;
+
+    FOnAfterDraw: TNotifyEvent;
     procedure UpdateVisibleObjects;
     procedure UpdateAllModels;
+  protected
+    FGObjs: IbGraphicalObjectSet;
+    procedure RegisterGraphicalObject(const gobj: TbGraphicalObject);
+    procedure UnregisterGraphicalObject(const gobj: TbGraphicalObject);
   public
+    property OnAfterDraw: TNotifyEvent read FOnAfterDraw write FOnAfterDraw;
+
     procedure InvalidateShaders;
+    function GraphicalObjects: IbGraphicalObjectSet;
 
     procedure PrepareToDraw;
     procedure DrawWorld;
@@ -208,6 +253,7 @@ type
     FToDestroy : IbGameObjSet;
     FUpdateSubs: IbGameObjSet;
     FTempObjs  : IbGameObjArr;
+    FGObjsToDestroy: IbGraphicalObjectArr;
 
     FUIObjects : IbGameObjSet;
     FWorldState: TbGameObject;
@@ -248,6 +294,70 @@ implementation
 uses avTexLoader;
 
 var gvCounter: Int64;
+
+{ TbGraphicalObject }
+
+function TbGraphicalObject.GetPos: TVec3;
+begin
+  Result := FPos;
+end;
+
+procedure TbGraphicalObject.SetPos(const AValue: TVec3);
+begin
+  if FPos = AValue then Exit;
+  FPos := AValue;
+end;
+
+function TbGraphicalObject.CanRegister(target: TavObject): boolean;
+begin
+  Result := inherited CanRegister(target);
+  if not Result then Exit;
+  FWorld := TbWorld(target.FindAtParents(TbWorld));
+  Result := Assigned(FWorld);
+end;
+
+procedure TbGraphicalObject.AfterRegister;
+begin
+  inherited AfterRegister;
+  World.Renderer.RegisterGraphicalObject(self);
+end;
+
+procedure TbGraphicalObject.UpdateStep;
+begin
+
+end;
+
+procedure TbGraphicalObject.SafeDestroy;
+begin
+  FMarkedForDestroy := True;
+end;
+
+procedure TbGraphicalObject.Draw;
+var pp: TVec4;
+    range: TVec2;
+begin
+  pp := Vec(FPos, 1.0) * Main.Camera.Matrix * Main.Projection.Matrix;
+  pp.xyz := pp.xyz / pp.w;
+  range := Main.Projection.DepthRangeMinMax;
+  if (pp.z < range.x) or (pp.z > range.y) then Exit;
+
+  pp.xy := (pp.xy*Vec(0.5,-0.5) + Vec(0.5, 0.5)) * Main.WindowSize;
+
+  FCanvas.ZValue := pp.z;
+  FCanvas.Draw(0, pp.xy, 1);
+end;
+
+procedure TbGraphicalObject.AfterConstruction;
+begin
+  inherited AfterConstruction;
+  FCanvas := TavCanvas.Create(Self);
+end;
+
+destructor TbGraphicalObject.Destroy;
+begin
+  FWorld.Renderer.UnregisterGraphicalObject(self);
+  inherited Destroy;
+end;
 
 { TbDynamicCollisionObject }
 
@@ -405,6 +515,7 @@ begin
   FAllTransparent := TavModelInstanceArr.Create();
   FAllEmissives := TavModelInstanceArr.Create();
   FVisibleObjects := TbGameObjArr.Create();
+  FGObjs := TbGraphicalObjectSet.Create();
 end;
 
 procedure TbWorldRenderer.UpdateVisibleObjects;
@@ -427,6 +538,16 @@ begin
   end;
 end;
 
+procedure TbWorldRenderer.RegisterGraphicalObject(const gobj: TbGraphicalObject);
+begin
+  FGObjs.Add(gobj);
+end;
+
+procedure TbWorldRenderer.UnregisterGraphicalObject(const gobj: TbGraphicalObject);
+begin
+  FGObjs.Delete(gobj);
+end;
+
 procedure TbWorldRenderer.InvalidateShaders;
 begin
   FLightRenderer.InvalidateShaders;
@@ -435,6 +556,11 @@ begin
   FModelsPBRProgram.Invalidate;
   FModelsEmissionProgram.Invalidate;
   FModelsShadowProgram.Invalidate;
+end;
+
+function TbWorldRenderer.GraphicalObjects: IbGraphicalObjectSet;
+begin
+  Result := FGObjs;
 end;
 
 procedure TbWorldRenderer.PrepareToDraw;
@@ -467,6 +593,8 @@ const
     );
 var sCubes: TSamplerInfo;
     prog: TavProgram;
+    i: Integer;
+    gobj: TbGraphicalObject;
 begin
   sCubes := cSampler_Cubes;
   sCubes.Comparison := Main.States.DepthFunc;
@@ -503,6 +631,11 @@ begin
   Main.States.DepthWrite := False;
   //transparent first
   FModels.Draw(FAllTransparent);
+  if Assigned(FOnAfterDraw) then
+    FOnAfterDraw(Self);
+
+  FGObjs.Reset;
+  while FGObjs.Next(gobj) do gobj.Draw();
 
   Main.States.DepthFunc := cfGreaterEqual;
   FEmissionFBO.FrameRect := FGBuffer.FrameRect;
@@ -584,7 +717,7 @@ procedure TbGameObject.SetPos(const AValue: TVec3);
 begin
   if FPos = AValue then Exit;
   FPos := AValue;
-  FTransformValid := False;
+  InvalidateTransform;
 end;
 
 procedure TbGameObject.SetBBox(const AValue: TAABB);
@@ -597,14 +730,14 @@ procedure TbGameObject.SetRot(const AValue: TQuat);
 begin
   if FRot = AValue then Exit;
   FRot := AValue;
-  FTransformValid := False;
+  InvalidateTransform;
 end;
 
 procedure TbGameObject.SetScale(const AValue: Single);
 begin
   if FScale = AValue then Exit;
   FScale := AValue;
-  FTransformValid := False;
+  InvalidateTransform;
 end;
 
 procedure TbGameObject.ValidateTransform;
@@ -620,6 +753,11 @@ begin
     FEmissive[i].Mesh.Transform := FTransform;
   for i := 0 to FTransparent.Count - 1 do
     FTransparent[i].Mesh.Transform := FTransform;
+end;
+
+procedure TbGameObject.InvalidateTransform;
+begin
+  FTransformValid := False;
 end;
 
 function TbGameObject.GetPos: TVec3;
@@ -805,9 +943,23 @@ end;
 procedure TbWorld.UpdateStep;
 var
   obj: TbGameObject;
+  gobjs_all: IbGraphicalObjectSet;
+  gobj: TbGraphicalObject;
+  i: Integer;
 begin
   Inc(FTimeTick);
   ProcessToDestroy;
+
+  gobjs_all := FRenderer.GraphicalObjects;
+  gobjs_all.Reset;
+  while gobjs_all.Next(gobj) do
+  begin
+    gobj.UpdateStep;
+    if gobj.MarkedForDestroy then FGObjsToDestroy.Add(gobj);
+  end;
+  for i := 0 to FGObjsToDestroy.Count - 1 do
+    FGObjsToDestroy[i].Free;
+  FGObjsToDestroy.Clear();
 
   FUpdateSubs.Reset;
   while FUpdateSubs.Next(obj) do
@@ -842,6 +994,7 @@ begin
   FUpdateSubs := TbGameObjSet.Create();
   FTempObjs   := TbGameObjArr.Create();
   FUIObjects  := TbGameObjSet.Create();
+  FGObjsToDestroy := TbGraphicalObjectArr.Create();
 
   FRenderer := TbWorldRenderer.Create(Self);
   //FPhysics := Create_IPhysWorld();

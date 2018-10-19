@@ -790,7 +790,7 @@ procedure TPointLightMatrices.Init(const APos: TVec3; const ARad: Single; const 
         NearPlane, FarPlane: Single;
     begin
       FarPlane := ARad;
-      NearPlane := FarPlane / 1000;
+      NearPlane := FarPlane / 10000;
       h := (cos(fFOV/2)/sin(fFOV/2));
       w := fAspect * h;
       Q := 1.0/(NearPlane - FarPlane);
