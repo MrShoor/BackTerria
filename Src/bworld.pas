@@ -90,6 +90,8 @@ type
     function Transform(): TMat4;
     function TransformInv(): TMat4;
 
+    function GetVisible(): Boolean; virtual;
+
     procedure AfterConstruction; override;
     destructor Destroy; override;
   end;
@@ -519,8 +521,12 @@ begin
 end;
 
 procedure TbWorldRenderer.UpdateVisibleObjects;
+var i: Integer;
 begin
   FVisibleObjects := World.QueryObjects(Main.Camera.Matrix * Main.Projection.Matrix);
+  for i := FVisibleObjects.Count - 1 downto 0 do
+    if not FVisibleObjects[i].GetVisible() then
+      FVisibleObjects.DeleteWithSwap(i);
 end;
 
 procedure TbWorldRenderer.UpdateAllModels;
@@ -831,21 +837,26 @@ begin
   Result := 0;
 end;
 
-procedure TbGameObject.UIDraw;
+procedure TbGameObject.UIDraw();
 begin
 
 end;
 
-function TbGameObject.Transform: TMat4;
+function TbGameObject.Transform(): TMat4;
 begin
   ValidateTransform;
   Result := FTransform;
 end;
 
-function TbGameObject.TransformInv: TMat4;
+function TbGameObject.TransformInv(): TMat4;
 begin
   ValidateTransform;
   Result := FTransformInv;
+end;
+
+function TbGameObject.GetVisible(): Boolean;
+begin
+  Result := True;
 end;
 
 procedure TbGameObject.AddModel(const AName: string; AType: TModelType);
