@@ -16,22 +16,6 @@ TextureCubeArray ShadowCube512; SamplerComparisonState ShadowCube512Sampler;
 //TextureCubeArray ShadowCube512; SamplerState ShadowCube512Sampler;
 //input
 
-float3x3 CalcTBN(float3 vPos, float3 vNorm, float2 vTex) {
-    float3 dPos1 = ddx(vPos);
-    float3 dPos2 = ddy(vPos);
-    float2 dTex1 = ddx(vTex);
-    float2 dTex2 = ddy(vTex);
- 
-    float3 v2 = cross(dPos2, vNorm);
-    float3 v1 = cross(vNorm, dPos1);
-    float3 T = v2 * dTex1.x + v1 * dTex2.x;
-    float3 B = v2 * dTex1.y + v1 * dTex2.y;
- 
-    float invdet = 1.0/sqrt(max( dot(T,T), dot(B,B) ));
-    
-    return float3x3( T * invdet, B * invdet, vNorm );
-}
-
 float4x4 getCubeMatrix(float3 LightDir, int matIdx) {
     float dmax = max(abs(LightDir.x), max(abs(LightDir.y), abs(LightDir.z)));
     int n = matIdx;

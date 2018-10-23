@@ -206,6 +206,7 @@ type
     FEmissionFBO: TavFrameBuffer;
 
     FModelsProgram: TavProgram;
+    FModelsProgram_NoLight: TavProgram;
     FModelsPBRProgram: TavProgram;
     FModelsShadowProgram: TavProgram;
     FModelsEmissionProgram: TavProgram;
@@ -245,6 +246,9 @@ type
     function Particles: TbParticleSystem;
 
     procedure PreloadModels(const AFiles: array of string);
+  public
+    property ModelsProgram_NoLight: TavProgram read FModelsProgram_NoLight;
+    property ModelsCollection: TavModelCollection read FModels;
   end;
 
   { TbWorld }
@@ -503,6 +507,8 @@ begin
 
   FModelsProgram := TavProgram.Create(Self);
   FModelsProgram.Load('avMesh', SHADERS_FROMRES, SHADERS_DIR);
+  FModelsProgram_NoLight := TavProgram.Create(Self);
+  FModelsProgram_NoLight.Load('avMesh_NoLight', SHADERS_FROMRES, SHADERS_DIR);
   FModelsPBRProgram := TavProgram.Create(Self);
   FModelsPBRProgram.Load('avMeshPBR', SHADERS_FROMRES, SHADERS_DIR);
   FModelsShadowProgram := TavProgram.Create(Self);
@@ -559,6 +565,7 @@ begin
   FLightRenderer.InvalidateShaders;
   FPostProcess.InvalidateShaders;
   FModelsProgram.Invalidate;
+  FModelsProgram_NoLight.Invalidate;
   FModelsPBRProgram.Invalidate;
   FModelsEmissionProgram.Invalidate;
   FModelsShadowProgram.Invalidate;
