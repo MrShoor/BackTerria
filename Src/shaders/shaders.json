@@ -68,5 +68,13 @@
             "Compute" : "render_clusters.cpp",
             "Path":["clustered"]
         }
+    ],
+    "_Programs":[
+        {
+        "Name"     : "avMeshTest",
+	"Vertex"   : "avMesh_test.cpp",
+	"Fragment" : "avMesh_test.cpp",
+	"Path"     :["avMesh"]
+        }
     ]
 }

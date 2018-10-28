@@ -59,6 +59,10 @@ struct ModelMaterialDesc {
             return BaseValue;
         }
     }
+    
+    float Geometry_Height(float2 TexCoord) {
+            return Maps.SampleLevel(MapsSampler, float3(TexCoord, mapSpecular_Hardness_mapGeometry_Normal.z), 0).a;
+    }    
 };
 
 ModelMaterialDesc LoadMaterialDesc(int MatIndex) {
