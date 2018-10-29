@@ -59,10 +59,17 @@ struct ModelMaterialDesc {
             return BaseValue;
         }
     }
+    float4 Shading_Ambient(float2 TexCoord) {
+        if (mapShading_Ambient_Emit.y > 0.001) {
+            return Maps.Sample(MapsSampler, float3(TexCoord, mapShading_Ambient_Emit.x)) * mapShading_Ambient_Emit.y;
+        } else {
+            return 1.0;
+        }
+    }
     
-    float Geometry_Height(float2 TexCoord) {
-            return Maps.SampleLevel(MapsSampler, float3(TexCoord, mapSpecular_Hardness_mapGeometry_Normal.z), 0).a;
-    }    
+    float Geometry_Height(float2 TexCoord, float2 texDx, float2 texDy) {
+            return Maps.SampleGrad(MapsSampler, float3(TexCoord, mapSpecular_Hardness_mapGeometry_Normal.z), texDx, texDy).a;
+    }
 };
 
 ModelMaterialDesc LoadMaterialDesc(int MatIndex) {

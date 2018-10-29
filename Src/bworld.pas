@@ -510,7 +510,8 @@ begin
   FModelsProgram_NoLight := TavProgram.Create(Self);
   FModelsProgram_NoLight.Load('avMesh_NoLight', SHADERS_FROMRES, SHADERS_DIR);
   FModelsPBRProgram := TavProgram.Create(Self);
-  FModelsPBRProgram.Load('avMeshPBR', SHADERS_FROMRES, SHADERS_DIR);
+  //FModelsPBRProgram.Load('avMeshPBR', SHADERS_FROMRES, SHADERS_DIR);
+  FModelsPBRProgram.Load('avMeshTest', SHADERS_FROMRES, SHADERS_DIR);
   FModelsShadowProgram := TavProgram.Create(Self);
   FModelsShadowProgram.Load('avMesh_shadow', SHADERS_FROMRES, SHADERS_DIR);
   FModelsEmissionProgram := TavProgram.Create(Self);
@@ -604,6 +605,16 @@ const
       Border     : (x: 0; y: 0; z: 0; w: 0);
       Comparison : cfGreater;
     );
+    cSampler_Cubes2 : TSamplerInfo = (
+      MinFilter  : tfLinear;
+      MagFilter  : tfLinear;
+      MipFilter  : tfLinear;
+      Anisotropy : 0;
+      Wrap_X     : twClamp;
+      Wrap_Y     : twClamp;
+      Wrap_Z     : twClamp;
+      Border     : (x: 0; y: 0; z: 0; w: 0);
+    );
 var sCubes: TSamplerInfo;
     prog: TavProgram;
     i: Integer;
@@ -628,6 +639,7 @@ begin
   prog.SetUniform('light_linkedList', FLightRenderer.LightsLinkedList);
   prog.SetUniform('light_matrices', FLightRenderer.LightMatrices);
   prog.SetUniform('ShadowCube512', FLightRenderer.Cubes512, sCubes);
+  prog.SetUniform('ShadowCube512_2', FLightRenderer.Cubes512, cSampler_Cubes2);
   FModels.Select();
 
   //depth prepass
