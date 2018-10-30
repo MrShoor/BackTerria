@@ -42,10 +42,11 @@ type
   { TLightData }
 
   TLightData = packed record
-    PosRange: TVec4;
-    Color   : TVec3;
-    Dir     : TVec3;
-    Angles  : TVec2;
+    PosRange : TVec4;
+    LightSize: Single;
+    Color    : TVec3;
+    Dir      : TVec3;
+    Angles   : TVec2;
     MatrixOffset: Cardinal;
     ShadowSizeSliceRange : TVec3i;
     class function Layout(): IDataLayout; static;
@@ -65,11 +66,13 @@ type
 
   TavLightRenderer = class;
 
+  TShadowsType = (stNone, st512, st1024, st2048);
+
   { TavLightSource }
 
   TavLightSource = class(TavObject)
   protected
-    FCastShadows: Boolean;
+    FCastShadows: TShadowsType;
     FLightIndex : Integer;
 
     FShadowSlice: IShadowSlice;
@@ -79,7 +82,7 @@ type
     FAdapter: Pointer;
 
     function AllocShadowSlices: IShadowSlice; virtual; abstract;
-    procedure SetCastShadows(const AValue: Boolean); virtual;
+    procedure SetCastShadows(const AValue: TShadowsType); virtual;
 
     procedure SetAdapter(const AAdapter: IavLightAdapter);
   protected
@@ -90,7 +93,7 @@ type
   public
     function ShadowSlice: IShadowSlice;
 
-    property CastShadows: Boolean read FCastShadows write SetCastShadows;
+    property CastShadows: TShadowsType read FCastShadows write SetCastShadows;
     function Matrices: PShadowMatrix;
     function MatricesCount: Integer;
 
@@ -105,12 +108,12 @@ type
   { IavLightSource }
 
   IavLightSource = interface (IavLightAdapter)
-    function GetCastShadows: Boolean;
-    procedure SetCastShadows(const AValue: Boolean);
+    function GetCastShadows: TShadowsType;
+    procedure SetCastShadows(const AValue: TShadowsType);
 
     function ShadowSlice: IShadowSlice;
 
-    property CastShadows: Boolean read GetCastShadows write SetCastShadows;
+    property CastShadows: TShadowsType read GetCastShadows write SetCastShadows;
     function Matrices: PShadowMatrix;
     function MatricesCount: Integer;
   end;
@@ -121,12 +124,15 @@ type
     function GetColor: TVec3;
     function GetPos: TVec3;
     function GetRadius: Single;
+    function GetSize: Single;
     procedure SetColor(const AValue: TVec3);
     procedure SetPos(const AValue: TVec3);
     procedure SetRadius(const AValue: Single);
+    procedure SetSize(const AValue: Single);
 
     property Pos   : TVec3  read GetPos    write SetPos;
     property Radius: Single read GetRadius write SetRadius;
+    property Size  : Single read GetSize   write SetSize;
     property Color : TVec3  read GetColor  write SetColor;
   end;
 
@@ -138,15 +144,18 @@ type
     function GetDir: TVec3;
     function GetPos: TVec3;
     function GetRadius: Single;
+    function GetSize: Single;
     procedure SetAngles(const AValue: TVec2);
     procedure SetColor(const AValue: TVec3);
     procedure SetDir(const AValue: TVec3);
     procedure SetPos(const AValue: TVec3);
     procedure SetRadius(const AValue: Single);
+    procedure SetSize(const AValue: Single);
 
     property Pos: TVec3 read GetPos write SetPos;
     property Dir: TVec3 read GetDir write SetDir;
     property Radius: Single read GetRadius write SetRadius;
+    property Size  : Single read GetSize   write SetSize;
     property Angles: TVec2 read GetAngles write SetAngles;
     property Color : TVec3 read GetColor write SetColor;
   end;
@@ -176,16 +185,19 @@ type
     FColor: TVec3;
     FPos: TVec3;
     FRadius: Single;
+    FSize: Single;
 
     procedure SetColor(const AValue: TVec3);
     procedure SetPos(const AValue: TVec3);
     procedure SetRadius(const AValue: Single);
+    procedure SetSize(const AValue: Single);
   protected
     function AllocShadowSlices: IShadowSlice; override;
     procedure ValidateLight(const AMain: TavMainRender); override;
   public
     property Pos   : TVec3  read FPos    write SetPos;
     property Radius: Single read FRadius write SetRadius;
+    property Size  : Single read FSize   write SetSize;
     property Color : TVec3  read FColor  write SetColor;
 
     procedure AfterConstruction; override;
@@ -200,11 +212,13 @@ type
     FDir: TVec3;
     FPos: TVec3;
     FRadius: Single;
+    FSize: Single;
     procedure SetAngles(AValue: TVec2);
     procedure SetColor(const AValue: TVec3);
     procedure SetDir(const AValue: TVec3);
     procedure SetPos(const AValue: TVec3);
     procedure SetRadius(const AValue: Single);
+    procedure SetSize(const AValue: Single);
   protected
     function AllocShadowSlices: IShadowSlice; override;
     procedure ValidateLight(const AMain: TavMainRender); override;
@@ -212,6 +226,7 @@ type
     property Pos: TVec3 read FPos write SetPos;
     property Dir: TVec3 read FDir write SetDir;
     property Radius: Single read FRadius write SetRadius;
+    property Size  : Single read FSize write SetSize;
     property Angles: TVec2 read FAngles write SetAngles;
     property Color : TVec3 read FColor write SetColor;
 
@@ -276,6 +291,10 @@ type
 
     FCubes512: TavShadowTextures;
     FSpots512: TavShadowTextures;
+    FCubes1024: TavShadowTextures;
+    FSpots1024: TavShadowTextures;
+    FCubes2048: TavShadowTextures;
+    FSpots2048: TavShadowTextures;
 
     FRenderCluster_Prog: TavProgram;
 
@@ -300,6 +319,10 @@ type
 
     function Cubes512: TavShadowTextures;
     function Spots512: TavShadowTextures;
+    function Cubes1024: TavShadowTextures;
+    function Spots1024: TavShadowTextures;
+    function Cubes2048: TavShadowTextures;
+    function Spots2048: TavShadowTextures;
 
     procedure AfterConstruction; override;
   end;
@@ -316,8 +339,8 @@ type
 
   TavLightSourceAdapter = class (TInterfacedObject, IavLightSource)
   private
-    function GetCastShadows: Boolean;
-    procedure SetCastShadows(const AValue: Boolean);
+    function GetCastShadows: TShadowsType;
+    procedure SetCastShadows(const AValue: TShadowsType);
     function ShadowSlice: IShadowSlice;
     function Matrices: PShadowMatrix;
     function MatricesCount: Integer;
@@ -336,9 +359,11 @@ type
     function GetColor: TVec3;
     function GetPos: TVec3;
     function GetRadius: Single;
+    function GetSize: Single;
     procedure SetColor(const AValue: TVec3);
     procedure SetPos(const AValue: TVec3);
     procedure SetRadius(const AValue: Single);
+    procedure SetSize(const AValue: Single);
   protected
     procedure _DisconnectAdapter; override;
     function GetLightSource: TavLightSource; override;
@@ -356,11 +381,13 @@ type
     function GetDir: TVec3;
     function GetPos: TVec3;
     function GetRadius: Single;
+    function GetSize: Single;
     procedure SetAngles(const AValue: TVec2);
     procedure SetColor(const AValue: TVec3);
     procedure SetDir(const AValue: TVec3);
     procedure SetPos(const AValue: TVec3);
     procedure SetRadius(const AValue: Single);
+    procedure SetSize(const AValue: Single);
   protected
     procedure _DisconnectAdapter; override;
     function GetLightSource: TavLightSource; override;
@@ -400,6 +427,12 @@ begin
   Result := FLight.Radius;
 end;
 
+function TavSpotLightAdapter.GetSize: Single;
+begin
+  if FLight = nil then Exit(0);
+  Result := FLight.Size;
+end;
+
 procedure TavSpotLightAdapter.SetAngles(const AValue: TVec2);
 begin
   if FLight = nil then Exit;
@@ -428,6 +461,12 @@ procedure TavSpotLightAdapter.SetRadius(const AValue: Single);
 begin
   if FLight = nil then Exit;
   FLight.Radius := AValue;
+end;
+
+procedure TavSpotLightAdapter.SetSize(const AValue: Single);
+begin
+  if FLight = nil then Exit;
+  FLight.Size := AValue;
 end;
 
 procedure TavSpotLightAdapter._DisconnectAdapter;
@@ -488,9 +527,22 @@ begin
   InvalidateLight;
 end;
 
+procedure TavSpotLight.SetSize(const AValue: Single);
+begin
+  if FSize = AValue then Exit;
+  FSize := AValue;
+  InvalidateLight;
+end;
+
 function TavSpotLight.AllocShadowSlices: IShadowSlice;
 begin
-  Result := LightRenderer.Spots512.AllocShadowSlice;
+  case FCastShadows of
+    st512  : Result := LightRenderer.Spots512.AllocShadowSlice;
+    st1024 : Result := LightRenderer.Spots1024.AllocShadowSlice;
+    st2048 : Result := LightRenderer.Spots2048.AllocShadowSlice;
+  else
+    Result := nil;
+  end;
 end;
 
 procedure TavSpotLight.ValidateLight(const AMain: TavMainRender);
@@ -554,7 +606,8 @@ begin
   pld^.Color := FColor;
   pld^.Dir := normalize(FDir);
   pld^.Angles := Vec(cos(FAngles.x*0.5), cos(FAngles.y*0.5));
-  if FCastShadows then
+  pld^.LightSize := FSize;
+  if FCastShadows <> stNone then
   begin
     FMatrices.Item[0] := BuildMatrix;
     FMatricesHandle := LightRenderer.FLightMatricesSB.Add(FMatrices as IVerticesData);
@@ -574,6 +627,7 @@ begin
   FMatrices := TShadowMatrixArr.Create();
   FMatrices.SetSize(1);
   FDir := Vec(0,-1,0);
+  FSize := 0.2;
 end;
 
 { TavPointLightAdapter }
@@ -596,6 +650,12 @@ begin
   Result := FLight.Radius;
 end;
 
+function TavPointLightAdapter.GetSize: Single;
+begin
+  if FLight = nil then Exit(0);
+  Result := FLight.Size;
+end;
+
 procedure TavPointLightAdapter.SetColor(const AValue: TVec3);
 begin
   if FLight = nil then Exit();
@@ -612,6 +672,12 @@ procedure TavPointLightAdapter.SetRadius(const AValue: Single);
 begin
   if FLight = nil then Exit();
   FLight.Radius := AValue;
+end;
+
+procedure TavPointLightAdapter.SetSize(const AValue: Single);
+begin
+  if FLight = nil then Exit();
+  FLight.Size := AValue;
 end;
 
 procedure TavPointLightAdapter._DisconnectAdapter;
@@ -634,13 +700,13 @@ end;
 
 { TavLightSourceAdapter }
 
-function TavLightSourceAdapter.GetCastShadows: Boolean;
+function TavLightSourceAdapter.GetCastShadows: TShadowsType;
 begin
-  if GetLightSource = nil then Exit(False);
+  if GetLightSource = nil then Exit(stNone);
   Result := GetLightSource.CastShadows;
 end;
 
-procedure TavLightSourceAdapter.SetCastShadows(const AValue: Boolean);
+procedure TavLightSourceAdapter.SetCastShadows(const AValue: TShadowsType);
 begin
   if GetLightSource = nil then Exit();
   GetLightSource.CastShadows := AValue;
@@ -862,6 +928,7 @@ end;
 class function TLightData.Layout: IDataLayout;
 begin
   Result := LB.Add('PosRange', ctFloat, 4)
+              .Add('LightSize', ctFloat, 1)
               .Add('Color', ctFloat, 3)
               .Add('Dir', ctFloat, 3)
               .Add('Angles', ctFloat, 2)
@@ -893,9 +960,22 @@ begin
   InvalidateLight;
 end;
 
+procedure TavPointLight.SetSize(const AValue: Single);
+begin
+  if FSize = AValue then Exit;
+  FSize := AValue;
+  InvalidateLight;
+end;
+
 function TavPointLight.AllocShadowSlices: IShadowSlice;
 begin
-  Result := LightRenderer.Cubes512.AllocShadowSlice;
+  case FCastShadows of
+    st512  : Result := LightRenderer.Cubes512.AllocShadowSlice;
+    st1024 : Result := LightRenderer.Cubes1024.AllocShadowSlice;
+    st2048 : Result := LightRenderer.Cubes2048.AllocShadowSlice;
+  else
+    Result := nil;
+  end;
 end;
 
 procedure TavPointLight.ValidateLight(const AMain: TavMainRender);
@@ -907,7 +987,8 @@ begin
   pld^.Color := FColor;
   pld^.Dir := Vec(0,0,0);
   pld^.Angles := Vec(0,0);
-  if FCastShadows and (AMain.ActiveApi <> apiDX11_WARP) then
+  pld^.LightSize := FSize;
+  if (FCastShadows <> stNone) and (AMain.ActiveApi <> apiDX11_WARP) then
   begin
     PPointLightMatrices(FMatrices.PItem[0])^.Init(Pos, Radius, AMain.Projection.DepthRange);
     FMatricesHandle := LightRenderer.FLightMatricesSB.Add(FMatrices as IVerticesData);
@@ -926,18 +1007,16 @@ begin
   inherited AfterConstruction;
   FMatrices := TShadowMatrixArr.Create();
   FMatrices.SetSize(6);
+  FSize := 0.2;
 end;
 
 { TavLightSource }
 
-procedure TavLightSource.SetCastShadows(const AValue: Boolean);
+procedure TavLightSource.SetCastShadows(const AValue: TShadowsType);
 begin
   if FCastShadows = AValue then Exit;
   FCastShadows := AValue;
-  if FCastShadows then
-    FShadowSlice := AllocShadowSlices()
-  else
-    FShadowSlice := nil;
+  FShadowSlice := AllocShadowSlices();
   InvalidateLight;
 end;
 
@@ -1098,20 +1177,28 @@ begin
     begin
       if LenSqr(ld.Dir) = 0 then
       begin
-        fbo := FCubes512.GetFBO(ld.ShadowSizeSliceRange);
-        fbo.FrameRect := RectI(0, 0, FCubes512.TextureSize, FCubes512.TextureSize);
-        fbo.Select();
-        fbo.ClearDS(Main.Projection.DepthRange.y);
-        ARenderer.ShadowPassGeometry( FLights[i], ld);
+        case FLights[i].CastShadows of
+          st512  : fbo := FCubes512.GetFBO(ld.ShadowSizeSliceRange);
+          st1024 : fbo := FCubes1024.GetFBO(ld.ShadowSizeSliceRange);
+          st2048 : fbo := FCubes2048.GetFBO(ld.ShadowSizeSliceRange);
+        else
+          Continue;
+        end;
       end
       else
       begin
-        fbo := FSpots512.GetFBO(ld.ShadowSizeSliceRange);
-        fbo.FrameRect := RectI(0, 0, FSpots512.TextureSize, FSpots512.TextureSize);
-        fbo.Select();
-        fbo.ClearDS(Main.Projection.DepthRange.y);
-        ARenderer.ShadowPassGeometry( FLights[i], ld);
+        case FLights[i].CastShadows of
+          st512  : fbo := FSpots512.GetFBO(ld.ShadowSizeSliceRange);
+          st1024 : fbo := FSpots1024.GetFBO(ld.ShadowSizeSliceRange);
+          st2048 : fbo := FSpots2048.GetFBO(ld.ShadowSizeSliceRange);
+        else
+          Continue;
+        end;
       end;
+      fbo.FrameRect := RectI(0, 0, ld.ShadowSizeSliceRange.x, ld.ShadowSizeSliceRange.x);
+      fbo.Select();
+      fbo.ClearDS(Main.Projection.DepthRange.y);
+      ARenderer.ShadowPassGeometry( FLights[i], ld);
     end;
   end;
 end;
@@ -1146,6 +1233,26 @@ begin
   Result := FSpots512;
 end;
 
+function TavLightRenderer.Cubes1024: TavShadowTextures;
+begin
+  Result := FCubes1024;
+end;
+
+function TavLightRenderer.Spots1024: TavShadowTextures;
+begin
+  Result := FSpots1024;
+end;
+
+function TavLightRenderer.Cubes2048: TavShadowTextures;
+begin
+  Result := FCubes2048;
+end;
+
+function TavLightRenderer.Spots2048: TavShadowTextures;
+begin
+  Result := FSpots2048;
+end;
+
 procedure TavLightRenderer.AfterConstruction;
 var cSize: TVec3i;
 begin
@@ -1171,8 +1278,12 @@ begin
   FRenderCluster_Prog := TavProgram.Create(Self);
   FRenderCluster_Prog.Load('Lighting_render_clusters', SHADERS_FROMRES, SHADERS_DIR);
 
-  FCubes512 := TavShadowTextures.Create(Self, 1024*4, 6);
-  FSpots512 := TavShadowTextures.Create(Self, 1024*4, 1);
+  FCubes512 := TavShadowTextures.Create(Self, 512, 6);
+  FSpots512 := TavShadowTextures.Create(Self, 512, 1);
+  FCubes1024 := TavShadowTextures.Create(Self, 1024, 6);
+  FSpots1024 := TavShadowTextures.Create(Self, 1024, 1);
+  FCubes2048 := TavShadowTextures.Create(Self, 2048, 6);
+  FSpots2048 := TavShadowTextures.Create(Self, 2048, 1);
 
   FLightMatricesSB := TavSBManaged.Create(Self);
 end;

@@ -647,6 +647,10 @@ begin
   prog.SetUniform('light_matrices', FLightRenderer.LightMatrices);
   prog.SetUniform('ShadowCube512', FLightRenderer.Cubes512, cSampler_Cubes2);
   prog.SetUniform('ShadowSpot512', FLightRenderer.Spots512, cSampler_Cubes2);
+  prog.SetUniform('ShadowCube1024', FLightRenderer.Cubes1024, cSampler_Cubes2);
+  prog.SetUniform('ShadowSpot1024', FLightRenderer.Spots1024, cSampler_Cubes2);
+  prog.SetUniform('ShadowCube2048', FLightRenderer.Cubes2048, cSampler_Cubes2);
+  prog.SetUniform('ShadowSpot2048', FLightRenderer.Spots2048, cSampler_Cubes2);
   FModels.Select();
 
   //depth prepass

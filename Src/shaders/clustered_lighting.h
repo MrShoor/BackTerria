@@ -9,39 +9,44 @@
 #define DEPTH_BIAS 0.0000005
 #define PI 3.1415926535897932384626433832795
 
-static const float LightSize = 0.5;
-
 //input
 float3 light_headBufferSize;
 Texture3D<uint> light_headBuffer;
 StructuredBuffer<ListNode> light_linkedList;
 
 TextureCubeArray ShadowCube512; SamplerState ShadowCube512Sampler;
+TextureCubeArray ShadowCube1024; SamplerState ShadowCube1024Sampler;
+TextureCubeArray ShadowCube2048; SamplerState ShadowCube2048Sampler;
 Texture2DArray ShadowSpot512; SamplerState ShadowSpot512Sampler;
+Texture2DArray ShadowSpot1024; SamplerState ShadowSpot1024Sampler;
+Texture2DArray ShadowSpot2048; SamplerState ShadowSpot2048Sampler;
 //input
 
-SamplerState SC512SamplerDef {
-    Filter = MIN_MAG_LINEAR_MIP_POINT;//MIN_MAG_MIP_LINEAR;
-    MaxAnisotropy = 0;
-    AddressU = TEXTURE_ADDRESS_CLAMP;
-    AddressV = TEXTURE_ADDRESS_CLAMP;
-    AddressW = TEXTURE_ADDRESS_CLAMP;
-    MaxLOD = 0;
-    MinLOD = 0;    
-    //ComparisonFunc = GREATER;
-        
-    
-//      MinFilter  : tfLinear;
-//      MagFilter  : tfLinear;
-//      MipFilter  : tfLinear;
-//      Anisotropy : 0;
-//      Wrap_X     : twClamp;
-//      Wrap_Y     : twClamp;
-//      Wrap_Z     : twClamp;
-//      Border     : (x: 0; y: 0; z: 0; w: 0);
-//      Comparison : cfGreater;     
+float SampleSadowCubeAuto(float3 Ray, Light l) {
+    switch (l.ShadowSizeSliceRange.x) {
+        case 512:
+            return ShadowCube512.SampleLevel(ShadowCube512Sampler, float4(Ray, l.ShadowSizeSliceRange.y/6.0), 0).r;
+        case 1024:
+            return ShadowCube1024.SampleLevel(ShadowCube1024Sampler, float4(Ray, l.ShadowSizeSliceRange.y/6.0), 0).r;
+        case 2048:
+            return ShadowCube2048.SampleLevel(ShadowCube2048Sampler, float4(Ray, l.ShadowSizeSliceRange.y/6.0), 0).r;
+        default:
+            return 0;
+    }
+}
 
-};
+float SampleShadowSpotAuto(float2 UV, Light l) {
+    switch (l.ShadowSizeSliceRange.x) {
+        case 512:
+            return ShadowSpot512.SampleLevel(ShadowSpot512Sampler, float3(UV, l.ShadowSizeSliceRange.y), 0).r;
+        case 1024:
+            return ShadowSpot1024.SampleLevel(ShadowSpot1024Sampler, float3(UV, l.ShadowSizeSliceRange.y), 0).r;
+        case 2048:
+            return ShadowSpot2048.SampleLevel(ShadowSpot2048Sampler, float3(UV, l.ShadowSizeSliceRange.y), 0).r;
+        default:
+            return 0;
+    }
+}
 
 float4x4 getCubeMatrix(float3 LightDir, int matIdx) {
     float dmax = max(abs(LightDir.x), max(abs(LightDir.y), abs(LightDir.z)));
@@ -89,15 +94,6 @@ float _testDepth(float PixelDepth, float ShadowMapDepth, float Slope) {
     return (PixelDepth - Slope*DEPTH_BIAS) > ShadowMapDepth;
 }
 
-float _sampleDepthSpotShadow(float3 WorldPt, float4x4 LightMat)
-{
-    float4 projPt = mul(float4(WorldPt,1.0), LightMat);
-    projPt.xy /= projPt.w;
-    projPt.xy *= float2(0.5, -0.5);
-    projPt.xy += 0.5;
-    return ShadowSpot512.SampleLevel(ShadowSpot512Sampler, float3(projPt.xy, 0), 0).r;
-}
-
 float _sampleCubeShadowRude(float3 Pt, float Slope, Light light)
 {
     if (light.ShadowSizeSliceRange.y < 0) return 1.0;
@@ -105,7 +101,7 @@ float _sampleCubeShadowRude(float3 Pt, float Slope, Light light)
     float4x4 m = getCubeMatrix(cubeDir, light.MatrixOffset);
     float4 projPt = mul(float4(Pt,1.0), m);
     projPt.z /= projPt.w;
-    float depth = ShadowCube512.SampleLevel(ShadowCube512Sampler, float4(cubeDir,light.ShadowSizeSliceRange.y/6.0), 0.0).r;
+    float depth = SampleSadowCubeAuto(cubeDir, light);//ShadowCube512.SampleLevel(ShadowCube512Sampler, float4(cubeDir,light.ShadowSizeSliceRange.y/6.0), 0.0).r;
     return _testDepth(projPt.z, depth, Slope);
 }
 
@@ -117,31 +113,13 @@ float _sampleSpotShadowRude(float3 Pt, float Slope, Light light)
     projPt.xyz /= projPt.w;
     projPt.xy *= float2(0.5, -0.5);
     projPt.xy += 0.5;
-    float shadowDepth = ShadowSpot512.SampleLevel(ShadowSpot512Sampler, float3(projPt.xy, 0), 0).r;
+    float shadowDepth = SampleShadowSpotAuto(projPt.xy, light);
     return _testDepth(projPt.z, shadowDepth, Slope);
 }
 
-#define BLOCKER_SAMPLES_COUNT 16
+#define BLOCKER_SAMPLES_COUNT 8
 #define SHADOW_SAMPLES_COUNT 16
-
-static const float2 ShadowHammerslayPts[SHADOW_SAMPLES_COUNT] = {
-    {0.0343008, 0.0370528},
-    {0.0968008, 0.5370528},
-    {0.1593008, 0.2870528},
-    {0.2218008, 0.7870528},
-    {0.2843008, 0.1620528},
-    {0.3468008, 0.6620528},
-    {0.4093008, 0.4120528},
-    {0.4718008, 0.9120528},
-    {0.5343009, 0.0995528},
-    {0.5968009, 0.5995528},
-    {0.6593009, 0.3495528},
-    {0.7218009, 0.8495528},
-    {0.7843009, 0.2245528},
-    {0.8468009, 0.7245528},
-    {0.9093009, 0.4745528},
-    {0.9718009, 0.9745528}
-};
+#define PCSS_SHADOW_MAX_SAMPLES 32 //(up to 65)
 
 float POM_SelfShadow(float3x3 tbn, float3 vMacroNorm, float3 vLightDir, float2 vTexCoordCurrent, float2 vTexCoordOrig, float vTexH, ModelMaterialDesc m) {
         float3 rayPOM = normalize( mul(tbn, -vLightDir) );
@@ -196,12 +174,12 @@ float _sampleSpotShadowPCF16(float3 Pt, float Slope, Light light) {
         
         //soft shadows
 	float totalShadow = 0;
-        float DiscScale = DiscSamples[BLOCKER_SAMPLES_COUNT-1].z * UVRadius;
-	[unroll] 
+        float DiscScale = DiscSamples[SHADOW_SAMPLES_COUNT].z * UVRadius;
+	[loop] 
         for(int i = 0; i < SHADOW_SAMPLES_COUNT; ++i)
 	{
             float2 sample = UVCenter + DiscSamples[i].xy * DiscScale;
-            float shadowDepth = ShadowSpot512.SampleLevel(ShadowSpot512Sampler, float3(sample, light.ShadowSizeSliceRange.y), 0).r;
+            float shadowDepth = SampleShadowSpotAuto(sample, light);
             totalShadow += _testDepth(sD_proj, shadowDepth, Slope);
 	}
 	totalShadow /= SHADOW_SAMPLES_COUNT;
@@ -228,14 +206,11 @@ float _sampleCubeShadowPCF16(float3 Pt, float Slope, Light light) {
 	float totalShadow = 0;
         
         float DiskScale = DiscSamples[SHADOW_SAMPLES_COUNT].z*0.5;
-	[unroll]
+	[loop]
         for(int i = 0; i < SHADOW_SAMPLES_COUNT; ++i)
 	{
 		float3 SamplePos = L + SideVector * DiscSamples[i].x*DiskScale + UpVector*DiscSamples[i].y*DiskScale;
-                float shadowDepth = ShadowCube512.SampleLevel(
-			ShadowCube512Sampler, 
-			float4(SamplePos, light.ShadowSizeSliceRange.y/6.0), 
-			0.0).r;
+                float shadowDepth = SampleSadowCubeAuto(SamplePos, light);
                 totalShadow += _testDepth(sD, shadowDepth, Slope);
 	}
 	totalShadow /= SHADOW_SAMPLES_COUNT;
@@ -253,7 +228,7 @@ float _sampleSpotShadowPCSS(float3 WorldPt, float Slope, Light light) {
         float sD = mul(float4(WorldPt,1.0), lm.view).z;
 
         //evaluate blockers disc center and radius
-        float4 tmp = mul(float4(0,LightSize*0.5,Llen,1), lm.proj);
+        float4 tmp = mul(float4(0,light.LightSize*0.5,Llen,1), lm.proj);
         tmp.xy /= tmp.w;
         float UVBlockerRadius = length(tmp.xy)*0.5;
         
@@ -268,13 +243,13 @@ float _sampleSpotShadowPCSS(float3 WorldPt, float Slope, Light light) {
         float blockerSumm = 0;
         float blockerCount = 0;        
        
-        float DiscScale = DiscSamples[BLOCKER_SAMPLES_COUNT-1].z * UVBlockerRadius;
+        float DiscScale = DiscSamples[BLOCKER_SAMPLES_COUNT].z * UVBlockerRadius;
         [loop]
         for(int i = 0; i < BLOCKER_SAMPLES_COUNT; ++i)
 	{
             float2 sample = UVCenter + DiscSamples[i].xy * DiscScale;
             
-            float shadowDepth = ShadowSpot512.SampleLevel(ShadowSpot512Sampler, float3(sample, light.ShadowSizeSliceRange.y), 0).r;
+            float shadowDepth = SampleShadowSpotAuto(sample, light);
             tmp = mul(float4(0,0,shadowDepth,1), lm.ProjInv);
             float sampleDepth = tmp.z / tmp.w;
             if (sampleDepth < sD+Slope*0.01) { //blocker bias
@@ -289,7 +264,7 @@ float _sampleSpotShadowPCSS(float3 WorldPt, float Slope, Light light) {
         float penumbraScale = max(0.0, (sD - avgBlockerDepth)/avgBlockerDepth - 0.03);
         
         float UVDiscRadius = max(0.0, penumbraScale * UVBlockerRadius);
-        float UVSamplesCount = max(65 * sqrt(penumbraScale), 1.0);
+        float UVSamplesCount = max(PCSS_SHADOW_MAX_SAMPLES * sqrt(penumbraScale), 1.0);
         
         //soft shadow
         DiscScale = DiscSamples[UVSamplesCount-1].z * UVDiscRadius;
@@ -298,10 +273,8 @@ float _sampleSpotShadowPCSS(float3 WorldPt, float Slope, Light light) {
         for(i = 0; i < UVSamplesCount; ++i)
 	{
             float2 sample = UVCenter + DiscSamples[i].xy * DiscScale;
-            float shadowDepth = ShadowSpot512.SampleLevel(ShadowSpot512Sampler, float3(sample, light.ShadowSizeSliceRange.y), 0).r;
-            if (shadowDepth < sD_proj + Slope*0.0000001) { //todo fix for reverse depth
-                totalShadow += 1.0;
-            }
+            float shadowDepth = SampleShadowSpotAuto(sample, light);
+            totalShadow += _testDepth(sD_proj, shadowDepth, Slope);
 	}
 	totalShadow /= UVSamplesCount;
         return totalShadow;
@@ -315,8 +288,8 @@ float _sampleCubeShadowPCSS(float3 Pt, float Slope, Light light) {
 	float3 SideVector = normalize(cross(L, float3(0, 0, 1)));
 	float3 UpVector = normalize(cross(SideVector, L));
 
-	SideVector *= LightSize*0.5;
-	UpVector *= LightSize*0.5;
+	SideVector *= light.LightSize*0.5;
+	UpVector *= light.LightSize*0.5;
         
         LightMatrix lm = getCubeLightMatrix(L, light.MatrixOffset);
         
@@ -332,14 +305,14 @@ float _sampleCubeShadowPCSS(float3 Pt, float Slope, Light light) {
         //find blockers
         
         float DiscScale = DiscSamples[BLOCKER_SAMPLES_COUNT].z*0.5;        
-	[unroll]
+	[loop]
         for(int i = 0; i < BLOCKER_SAMPLES_COUNT; ++i)
 	{
 		float3 SamplePos = L + SideVector * DiscSamples[i].x * DiscScale + UpVector * DiscSamples[i].y * DiscScale;
-		float sampleDepth = ShadowCube512.SampleLevel(ShadowCube512Sampler, float4(SamplePos, light.ShadowSizeSliceRange.y/6.0), 0.0).r;
+		float sampleDepth = SampleSadowCubeAuto(SamplePos, light);
                 tmp = mul(float4(0,0,sampleDepth,1.0), lm.ProjInv);
                 sampleDepth = tmp.z / tmp.w;
-                if (sampleDepth < sD + Slope*0.01) { //todo fix for reverse depth
+                if (sampleDepth < sD + Slope*0.01) {
                     blockerSumm += sampleDepth;
                     blockerCount += 1.0;
                 }
@@ -349,24 +322,18 @@ float _sampleCubeShadowPCSS(float3 Pt, float Slope, Light light) {
         
         //eval penumbra size and disc params
         float penumbraScale = max(0.0, (sD - avgBlockerDepth)/avgBlockerDepth - 0.03);
-        float DiscSamplesCount = max(65 * sqrt(penumbraScale), 1.0);        
+        float DiscSamplesCount = max(PCSS_SHADOW_MAX_SAMPLES * sqrt(penumbraScale), 1.0);        
         DiscScale = DiscSamples[DiscSamplesCount].z * penumbraScale;
         
         //soft shadow
-	[unroll] 
-        for(i = 0; i < SHADOW_SAMPLES_COUNT; ++i)
+	[loop] 
+        for(i = 0; i < DiscSamplesCount; ++i)
 	{
             float3 SamplePos = L + (SideVector * DiscSamples[i].x + UpVector * DiscSamples[i].y) * DiscScale;
-            float sampleDepth = ShadowCube512.SampleLevel(
-                                    ShadowCube512Sampler, 
-                                    float4(SamplePos, light.ShadowSizeSliceRange.y/6.0), 
-                                    0.0).r;
+            float sampleDepth = SampleSadowCubeAuto(SamplePos, light);
             totalShadow += _testDepth(sD_proj, sampleDepth, Slope);
-//            if (sampleDepth < sD_proj + Slope*0.0000005) { //todo fix for reverse depth
-//                totalShadow += 1.0;
-//            }
 	}
-	totalShadow /= SHADOW_SAMPLES_COUNT;        
+	totalShadow /= DiscSamplesCount;        
 
 	return totalShadow;
 }
@@ -414,7 +381,7 @@ float4 Clustered_Phong(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 N
         float atten = saturate(1.0 - ((dist * dist) / (l.PosRange.w * l.PosRange.w))); //distance attenuation
         if (l.Angles.y) {
             atten *= cs_angle_over==0 ? 0 : saturate(cs_angle_over / (l.Angles.x - l.Angles.y)); //angle attenuation
-            atten *= _sampleSpotShadowPCF16(WorldPos, Slope, l);
+            atten *= _sampleSpotShadowPCSS(WorldPos, Slope, l);
         } else {
             atten *= _sampleCubeShadowPCSS(WorldPos, Slope, l);
         }
