@@ -190,6 +190,7 @@ type
     TShadowPassAdapter = class(TInterfacedObject, IGeometryRenderer)
     private
       FOwner: TbWorldRenderer;
+      FViewProjMat: TMat4Arr;
       procedure ShadowPassGeometry(const ALight: TavLightSource; const ALightData: TLightData);
       procedure DrawTransparentGeometry();
     public
@@ -458,13 +459,22 @@ end;
 *)
 { TbWorldRenderer.TShadowPassAdapter }
 
-procedure TbWorldRenderer.TShadowPassAdapter.ShadowPassGeometry(
-  const ALight: TavLightSource; const ALightData: TLightData);
+procedure TbWorldRenderer.TShadowPassAdapter.ShadowPassGeometry(const ALight: TavLightSource; const ALightData: TLightData);
+var
+  i: Integer;
+  sm: PShadowMatrix;
 begin
+  sm := ALight.Matrices;
+  for i := 0 to ALightData.ShadowSizeSliceRange.z - 1 do
+  begin
+    FViewProjMat[i] := sm^.viewProj;
+    Inc(sm);
+  end;
+
   FOwner.FModelsShadowProgram.Select;
-  FOwner.FModelsShadowProgram.SetUniform('matCount', 6);
+  FOwner.FModelsShadowProgram.SetUniform('matCount', ALightData.ShadowSizeSliceRange.z);
   FOwner.FModelsShadowProgram.SetUniform('sliceOffset', Integer(round(ALightData.ShadowSizeSliceRange.y)));
-  FOwner.FModelsShadowProgram.SetUniform('viewProj', ALight.Matrices, 6);
+  FOwner.FModelsShadowProgram.SetUniform('viewProj', @FViewProjMat[0], ALightData.ShadowSizeSliceRange.z);
   FOwner.FModels.Select;
   FOwner.FModels.Draw(FOwner.FAllModels);
 end;
@@ -477,6 +487,7 @@ end;
 constructor TbWorldRenderer.TShadowPassAdapter.Create(AOwner: TbWorldRenderer);
 begin
   FOwner := AOwner;
+  SetLength(FViewProjMat, 6);
 end;
 
 { TbWorldRenderer }
@@ -615,14 +626,10 @@ const
       Wrap_Z     : twClamp;
       Border     : (x: 0; y: 0; z: 0; w: 0);
     );
-var sCubes: TSamplerInfo;
-    prog: TavProgram;
+var prog: TavProgram;
     i: Integer;
     gobj: TbGraphicalObject;
 begin
-  sCubes := cSampler_Cubes;
-  sCubes.Comparison := Main.States.DepthFunc;
-
   Main.States.CullMode := cmBack;
 
   if True then
@@ -638,8 +645,8 @@ begin
   prog.SetUniform('light_headBuffer', FLightRenderer.LightsHeadBuffer, Sampler_NoFilter);
   prog.SetUniform('light_linkedList', FLightRenderer.LightsLinkedList);
   prog.SetUniform('light_matrices', FLightRenderer.LightMatrices);
-  prog.SetUniform('ShadowCube512', FLightRenderer.Cubes512, sCubes);
-  prog.SetUniform('ShadowCube512_2', FLightRenderer.Cubes512, cSampler_Cubes2);
+  prog.SetUniform('ShadowCube512', FLightRenderer.Cubes512, cSampler_Cubes2);
+  prog.SetUniform('ShadowSpot512', FLightRenderer.Spots512, cSampler_Cubes2);
   FModels.Select();
 
   //depth prepass

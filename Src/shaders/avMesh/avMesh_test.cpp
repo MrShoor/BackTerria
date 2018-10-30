@@ -111,7 +111,7 @@ PS_Output PS(VS_Output In) {
 //        
       Out.Color = Clustered_Phong(pCrd.xyz, In.vCoord, In.wCoord, norm, normalize(In.vCoord), diff, m.Spec*spec, 0.05, 180.0);
 //    }
-    Out.Color *= m.Shading_Ambient(In.vTex);
+    //Out.Color *= m.Shading_Ambient(In.vTex);
     
     //Out.Color.yz = 0.0;
     //Out.Normal = PackNormal(norm);

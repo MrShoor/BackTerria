@@ -22,11 +22,18 @@ struct ListNode {
     uint NextNode;
 };
 
+struct LightMatrix {
+    float4x4 viewProj;
+    float4x4 view;
+    float4x4 proj;
+    float4x4 ProjInv;
+};
+
 float2 depthRange;
 float2 planesNearFar;
 float lightCount;
 StructuredBuffer<Light> light_list;
-StructuredBuffer<float4x4> light_matrices;
+StructuredBuffer<LightMatrix> light_matrices;
 
 #endif	/* LIGHTING_TYPES_H */
 
