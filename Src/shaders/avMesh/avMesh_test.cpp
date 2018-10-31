@@ -41,12 +41,15 @@ static const float LightInt = 3;
 
 PS_Output PS(VS_Output In) {
     PS_Output Out;
+    Out.Color = 1.0;
+    
     In.vNorm = normalize(In.vNorm);
     
     float2 vTex_dx = ddx(In.vTex);
     float2 vTex_dy = ddy(In.vTex);
     
     float3 vMacroNorm = In.vNorm;
+    
     float2 vTexCoordOrig = In.vTex;
     float vTexH = 0;
     float3x3 tbn = { {1,0,0}, {0,1,0}, {0,0,1} };
@@ -88,16 +91,25 @@ PS_Output PS(VS_Output In) {
 //        }
         
         norm = UnpackNormal(m.Geometry_Normal(In.vTex, float4(0.5,0.5,1,0)));
-        //norm.xy *= 20;
-        norm.y = -norm.y;
-        norm.x = -norm.x;
         norm = mul(norm, tbn);
         norm = normalize(norm);
     }
     
     float4 diff = m.Diffuse_Color(In.vTex, m.Diff);
+    //diff = 0.7;
     float spec = m.Specular_Intensity(In.vTex, m.Spec).r;
+    //spec = 1.0;
     diff = pow(abs(diff), 2.2);
+    
+    
+    float metallic = 0.01;//spec;
+    float4 albedo = diff;
+    float roughness = 0.85;
+    
+    float3 F0 = 0.04;
+    F0 = lerp(F0, albedo.xyz, metallic);
+    
+    //float4 Clustered_GGX(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 Normal, float3 ViewDir, float4 Albedo, float3 Ambient, float3 F0, float roughness) {
     
     float4 pCrd = In.pCoord;
     pCrd.xyz /= pCrd.w;    
@@ -109,9 +121,11 @@ PS_Output PS(VS_Output In) {
 //              );
 //    } else {
 //        
-      Out.Color = Clustered_Phong(pCrd.xyz, In.vCoord, In.wCoord, norm, normalize(In.vCoord), diff, m.Spec*spec, 0.05, 180.0);
+    Out.Color = Clustered_GGX(pCrd.xyz, In.vCoord, In.wCoord, norm, normalize(In.vCoord), albedo, F0, metallic, roughness);
+      //Out.Color = Clustered_Phong(pCrd.xyz, In.vCoord, In.wCoord, norm, normalize(In.vCoord), diff, m.Spec*spec, 0.7, 80.0);
 //    }
     //Out.Color *= m.Shading_Ambient(In.vTex);
+    
     
     //Out.Color.yz = 0.0;
     //Out.Normal = PackNormal(norm);

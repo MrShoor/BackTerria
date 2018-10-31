@@ -62,7 +62,8 @@ PS_Output PS(VS_Output In) {
     
     float4 pCrd = In.pCoord;
     pCrd.xyz /= pCrd.w;    
-    Out.Color = Clustered_GGX(pCrd.xyz, In.vCoord, In.wCoord, norm, normalize(In.vCoord), albedo, 0.2, F0, roughness);
+    
+    Out.Color = Clustered_GGX(pCrd.xyz, In.vCoord, In.wCoord, norm, normalize(In.vCoord), albedo, F0, metallic, roughness);
     
     //Out.Color = float4(tonemapReinhard(Out.Color.xyz), Out.Color.a);
     //Out.Color.xyz = norm.xyz;

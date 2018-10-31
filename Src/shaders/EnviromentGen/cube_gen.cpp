@@ -65,9 +65,11 @@ float4 IntegrateIrradiance(float3 normal) {
     up = cross(normal, right);
 
     float sampleDelta = 0.025;
-    float nrSamples = 0.0; 
+    float nrSamples = 0.0;
+    [loop]
     for(float phi = 0.0; phi < 2.0 * PI; phi += sampleDelta)
     {
+        [loop]
         for(float theta = 0.0; theta < 0.5 * PI; theta += sampleDelta)
         {
             float3 tangentSample = float3(sin(theta) * cos(phi),  sin(theta) * sin(phi), cos(theta));

@@ -7,6 +7,8 @@ struct VS_In {
 
 static const float2 Quad[4] = { {-1, -1}, {-1, 1}, {1, -1}, {1, 1} };
 
+float uDepthRange = 0.5;
+
 struct VS_Out {
     float4 Pos : SV_Position;
     float3 Dir : Dir;
@@ -14,7 +16,7 @@ struct VS_Out {
 
 VS_Out VS(VS_In In) {
     VS_Out Out;
-    Out.Pos = float4(Quad[In.VertexID], 1.0, 1.0);
+    Out.Pos = float4(Quad[In.VertexID], uDepthRange, 1.0);
     float4 tmp = mul(Out.Pos, P_InverseMatrix);
     tmp.xyz /= tmp.w;
     tmp.w = 0.0;
@@ -61,7 +63,7 @@ float3 Uncharted2TonemapFull(float3 x) { //input linear, output sRGB
 }
 
 TextureCube Cube; SamplerState CubeSampler;
-float uSampleLevel;
+float uSampleLevel = 0.0;
 
 struct PS_Out {
     float4 Color : SV_Target0;
@@ -70,6 +72,6 @@ struct PS_Out {
 PS_Out PS(VS_Out In) {
     PS_Out Out;
     Out.Color = Cube.SampleLevel(CubeSampler, normalize(In.Dir), uSampleLevel);
-    Out.Color.xyz = Uncharted2TonemapFull(Out.Color.xyz);
+    //Out.Color.xyz = Uncharted2TonemapFull(Out.Color.xyz);
     return Out;
 }

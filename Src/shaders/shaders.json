@@ -91,9 +91,9 @@
         "Path"     :["EnviromentGen"]
         },
         {
-        "Name"     : "cubemap_test_out",
-        "Vertex"   : "cubemap_test_out.cpp",
-        "Fragment" : "cubemap_test_out.cpp",
+        "Name"     : "cubemap_out",
+        "Vertex"   : "cubemap_out.cpp",
+        "Fragment" : "cubemap_out.cpp",
         "Path"     :["EnviromentGen"]
         }
     ],
@@ -105,22 +105,10 @@
         "Path"     :["avMesh"]
         },
         {
-        "Name"     : "lut_gen",
-        "Vertex"   : "brdfLUT_gen.cpp",
-        "Fragment" : "brdfLUT_gen.cpp",
-        "Path"     :["EnviromentGen"]
-        },
-        {
         "Name"     : "StupidCompose",
         "Vertex"   : "stupid_compose.cpp",
         "Fragment" : "stupid_compose.cpp",
         "Path"     :["postprocess"]
-        },
-        {
-        "Name"     : "cubemap_test_out",
-        "Vertex"   : "cubemap_test_out.cpp",
-        "Fragment" : "cubemap_test_out.cpp",
-        "Path"     :["EnviromentGen"]
         }
     ]
 }

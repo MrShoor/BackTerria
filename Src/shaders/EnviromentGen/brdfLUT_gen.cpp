@@ -16,7 +16,7 @@ static const float2 Quad[4] = { {-1, -1}, {-1, 1}, {1, -1}, {1, 1} };
 VS_Out VS(VS_In In) {
     VS_Out Out;
     Out.Pos = float4(Quad[In.VID], 0.5, 1.0);
-    Out.Tex = Out.Pos.xy * FBOFlip * 0.5;
+    Out.Tex = Out.Pos.xy * FBOFlip * float2(0.5,-0.5);
     Out.Tex += 0.5;
     return Out;
 }

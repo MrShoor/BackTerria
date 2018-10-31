@@ -90,7 +90,7 @@ var
 
 begin
   inherited AfterRegister;
-  FResultFBO := Create_FrameBuffer(Self, [TTextureFormat.RGBA], [true]);
+  FResultFBO := Create_FrameBuffer(Self, [TTextureFormat.RGBA], [True]);
 
   FPostProcess := TavProgram.Create(Self);
   FPostProcess.Load('PostProcess1', SHADERS_FROMRES, SHADERS_DIR);

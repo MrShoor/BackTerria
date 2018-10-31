@@ -91,26 +91,31 @@ end;
 procedure TbCubeUtils.GenIrradianceFromCube(const ASrcCubeTexture: TavTexture; const ADestCubeTexture: TavTexture; const ADestSize: Integer);
 var prog: TavProgram;
     fbo : TavFrameBuffer;
+    oldfbo: TavFrameBuffer;
 begin
   prog := GetIrradianceProgram();
   fbo := GetFBO();
 
   fbo.SetColor(0, ADestCubeTexture, 0, 0, 6);
   fbo.FrameRect := RectI(0, 0, ADestSize, ADestSize);
-  fbo.Select();
+  oldfbo := fbo.Select();
 
   prog.Select();
   prog.SetUniform('Cube', ASrcCubeTexture, Sampler_LinearNoMips);
   prog.SetUniform('viewProjInv', @FCubeMatrices[0], 6);
   prog.Draw(ptPoints, cmNone, false, 0, 0, 6);
+
+  if oldfbo <> nil then
+    oldfbo.Select();
 end;
 
 procedure TbCubeUtils.GenRadianceFromCube(const ASrcCubeTexture: TavTexture; const ADestCubeTexture: TavTexture; const ADestSize: Integer);
 var prog: TavProgram;
     fbo : TavFrameBuffer;
-    lastFbo: TavFrameBuffer;
+    oldfbo: TavFrameBuffer;
     i: Integer;
 begin
+  oldfbo := nil;
   prog := GetRadianceProgram();
   fbo := GetFBO();
 
@@ -121,7 +126,10 @@ begin
   begin
     fbo.SetColor(0, ADestCubeTexture, i, 0, 6);
     fbo.FrameRect := RectI(0, 0, ADestSize shr i, ADestSize shr i);
-    fbo.Select();
+    if i = 0 then
+      oldfbo := fbo.Select(False)
+    else
+      fbo.Select(False);
 
     prog.Select();
     prog.SetUniform('Cube', ASrcCubeTexture, Sampler_LinearNoMips);
@@ -129,20 +137,27 @@ begin
     prog.SetUniform('uRoughness', i / (ADestCubeTexture.MipsCount - 1));
     prog.Draw(ptPoints, cmNone, false, 0, 0, 6);
   end;
+
+  if oldfbo <> nil then
+    oldfbo.Select();
 end;
 
 procedure TbCubeUtils.GenLUTbrdf(const ADestTexture: TavTexture; const ALUTSize: Integer);
 var prog: TavProgram;
     fbo : TavFrameBuffer;
+    oldfbo: TavFrameBuffer;
 begin
   prog := GetLUTProgram;
   fbo := GetFBO;
   fbo.SetColor(0, ADestTexture);
   fbo.FrameRect := RectI(0, 0, ALUTSize, ALUTSize);
-  fbo.Select();
+  oldfbo := fbo.Select();
 
   prog.Select();
   prog.Draw(ptTriangleStrip, cmNone, false, 0, 0, 4);
+
+  if oldfbo <> nil then
+    oldfbo.Select();
 end;
 
 procedure TbCubeUtils.GenEnviromentFromCube(var AEnv: TEnviroment; const AEnvOwner: TavMainRenderChild; const ACubeMapFileName: string);

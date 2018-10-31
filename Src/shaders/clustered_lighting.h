@@ -20,6 +20,12 @@ TextureCubeArray ShadowCube2048; SamplerState ShadowCube2048Sampler;
 Texture2DArray ShadowSpot512; SamplerState ShadowSpot512Sampler;
 Texture2DArray ShadowSpot1024; SamplerState ShadowSpot1024Sampler;
 Texture2DArray ShadowSpot2048; SamplerState ShadowSpot2048Sampler;
+
+float4 EnvAmbientColor;
+TextureCube EnvRadiance; SamplerState EnvRadianceSampler;
+TextureCube EnvIrradiance; SamplerState EnvIrradianceSampler;
+Texture2D brdfLUT; SamplerState brdfLUTSampler;
+
 //input
 
 float SampleSadowCubeAuto(float3 Ray, Light l) {
@@ -117,9 +123,9 @@ float _sampleSpotShadowRude(float3 Pt, float Slope, Light light)
     return _testDepth(projPt.z, shadowDepth, Slope);
 }
 
-#define BLOCKER_SAMPLES_COUNT 8
+#define BLOCKER_SAMPLES_COUNT 5
 #define SHADOW_SAMPLES_COUNT 16
-#define PCSS_SHADOW_MAX_SAMPLES 32 //(up to 65)
+#define PCSS_SHADOW_MAX_SAMPLES 12
 
 float POM_SelfShadow(float3x3 tbn, float3 vMacroNorm, float3 vLightDir, float2 vTexCoordCurrent, float2 vTexCoordOrig, float vTexH, ModelMaterialDesc m) {
         float3 rayPOM = normalize( mul(tbn, -vLightDir) );
@@ -228,7 +234,7 @@ float _sampleSpotShadowPCSS(float3 WorldPt, float Slope, Light light) {
         float sD = mul(float4(WorldPt,1.0), lm.view).z;
 
         //evaluate blockers disc center and radius
-        float4 tmp = mul(float4(0,light.LightSize*0.5,Llen,1), lm.proj);
+        float4 tmp = mul(float4(0,light.LightSize,Llen,1), lm.proj);
         tmp.xy /= tmp.w;
         float UVBlockerRadius = length(tmp.xy)*0.5;
         
@@ -259,15 +265,21 @@ float _sampleSpotShadowPCSS(float3 WorldPt, float Slope, Light light) {
 	}
         if (blockerCount < 1.0) return 1.0;
         float avgBlockerDepth = blockerSumm / blockerCount;
+        //return avgBlockerDepth-520;
         
         //eval penumbra size and disc params
-        float penumbraScale = max(0.0, (sD - avgBlockerDepth)/avgBlockerDepth - 0.03);
+        float penumbraScale = max(0.0, (sD - avgBlockerDepth)/avgBlockerDepth); // - 0.03
         
-        float UVDiscRadius = max(0.0, penumbraScale * UVBlockerRadius);
-        float UVSamplesCount = max(PCSS_SHADOW_MAX_SAMPLES * sqrt(penumbraScale), 1.0);
+        tmp = mul(float4(0,10*penumbraScale,Llen,1), lm.proj);
+        tmp.xy /= tmp.w;
+        float UVDiscRadius = length(tmp.xy)*0.5;
+        
+        
+        //float UVDiscRadius = max(0.0, penumbraScale * UVBlockerRadius);
+        float UVSamplesCount = clamp(PCSS_SHADOW_MAX_SAMPLES * sqrt(penumbraScale), 1.0, PCSS_SHADOW_MAX_SAMPLES);
         
         //soft shadow
-        DiscScale = DiscSamples[UVSamplesCount-1].z * UVDiscRadius;
+        DiscScale = DiscSamples[UVSamplesCount-1].z * UVDiscRadius;// * penumbraScale;
         float totalShadow = 0.0;
 	[loop] 
         for(i = 0; i < UVSamplesCount; ++i)
@@ -321,8 +333,8 @@ float _sampleCubeShadowPCSS(float3 Pt, float Slope, Light light) {
         float avgBlockerDepth = blockerSumm / blockerCount;
         
         //eval penumbra size and disc params
-        float penumbraScale = max(0.0, (sD - avgBlockerDepth)/avgBlockerDepth - 0.03);
-        float DiscSamplesCount = max(PCSS_SHADOW_MAX_SAMPLES * sqrt(penumbraScale), 1.0);        
+        float penumbraScale = max(0.0, (sD - avgBlockerDepth)/avgBlockerDepth + 0.3);
+        float DiscSamplesCount = clamp(PCSS_SHADOW_MAX_SAMPLES * sqrt(penumbraScale), 1.0, PCSS_SHADOW_MAX_SAMPLES);
         DiscScale = DiscSamples[DiscSamplesCount].z * penumbraScale;
         
         //soft shadow
@@ -366,9 +378,10 @@ float4 Clustered_Phong(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 N
         i++;
         
         Light l = light_list[node.LightIdx];
-        //l.Color *= float3(1.5, 1.3, 0.5);
-        //l.Color *= float3(249, 253, 96)/128;
-        //l.Color *= float3(220, 220, 70)/128;
+        l.Color *= 10.0;
+//        l.Color *= float3(1.5, 1.3, 0.5);
+//        l.Color *= float3(249, 253, 96)/128;
+//        l.Color *= float3(220, 220, 70)/128;
 
         float3 LightDir = l.PosRange.xyz - WorldPos;
         float dist = length(LightDir);
@@ -381,9 +394,10 @@ float4 Clustered_Phong(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 N
         float atten = saturate(1.0 - ((dist * dist) / (l.PosRange.w * l.PosRange.w))); //distance attenuation
         if (l.Angles.y) {
             atten *= cs_angle_over==0 ? 0 : saturate(cs_angle_over / (l.Angles.x - l.Angles.y)); //angle attenuation
-            atten *= _sampleSpotShadowPCSS(WorldPos, Slope, l);
+            atten *= _sampleSpotShadowPCF16(WorldPos, Slope*0.0, l);
+            //return _sampleSpotShadowPCSS(WorldPos, Slope, l);
         } else {
-            atten *= _sampleCubeShadowPCSS(WorldPos, Slope, l);
+            atten *= _sampleCubeShadowPCSS(WorldPos, Slope*0.0, l);
         }
                 
         Out.xyz += PhongColor(Normal, ViewDir, LightDir, l.Color, Diffuse, Specular, SpecPower)*atten;        
@@ -465,6 +479,11 @@ float3 FresnelSchlick(float3 F0, float cosTheta) {
     return F0 + (1.0 - F0) * pow(1.0 - saturate(cosTheta), 5.0);
 }
 
+float3 FresnelSchlickRoughness(float3 F0, float cosTheta, float roughness)
+{
+    return F0 + (max(1.0 - roughness, F0) - F0) * pow(saturate(1.0 - cosTheta), 5.0);
+}   
+
 float3 CookTorrance_GGX(float3 n, float3 l, float3 v, float3 h, float3 F0, float3 albedo, float roughness) {
     //precompute dots
     float NL = dot(n, l);
@@ -488,8 +507,8 @@ float3 CookTorrance_GGX(float3 n, float3 l, float3 v, float3 h, float3 F0, float
     return max(0.0, albedo*diffK*NL + specK);
 }
 
-float4 Clustered_GGX(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 Normal, float3 ViewDir, float4 Albedo, float3 Ambient, float3 F0, float roughness) {
-    float4 Out = float4(Ambient.xyz*Albedo.xyz, Albedo.a);    
+float4 Clustered_GGX(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 Normal, float3 ViewDir, float4 Albedo, float3 F0, float metallic, float roughness) {
+    float4 Out = float4(EnvAmbientColor.xyz*Albedo.xyz*EnvAmbientColor.w, Albedo.a);
     
     float z = (ViewPos.z - planesNearFar.x) / (planesNearFar.y - planesNearFar.x);
     ProjPos.xy *= 0.5;
@@ -499,15 +518,14 @@ float4 Clustered_GGX(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 Nor
     uint nodeIdx = light_headBuffer[crd];
     int i = 0;
     
-    float3 v = -ViewDir;
-    
+    float3 v = -ViewDir;    
     while ((nodeIdx != 0xffffffff)&&(i<10)) {
         ListNode node = light_linkedList[nodeIdx];
         nodeIdx = node.NextNode;
         i++;
         
         Light light = light_list[node.LightIdx];
-        light.Color = light.Color * 5;
+        light.Color = light.Color*2;
 
         float3 l = light.PosRange.xyz - WorldPos;
         float dist = length(l);
@@ -519,18 +537,47 @@ float4 Clustered_GGX(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 Nor
         float atten = saturate(1.0 - ((dist * dist) / (light.PosRange.w * light.PosRange.w))); //distance attenuation
         if (light.Angles.y) {
             atten *= cs_angle_over==0 ? 0 : saturate(cs_angle_over / (light.Angles.x - light.Angles.y)); //angle attenuation
-            //atten *= _sampleShadowPCF16(WorldPos, light);
+            atten *= _sampleSpotShadowPCF16(WorldPos, 0, light);
         } else {
-            atten *= _sampleCubeShadowPCF16(WorldPos, 0, light);
+            atten *= _sampleCubeShadowPCSS(WorldPos, 0, light);
         }
         
         Out.xyz += CookTorrance_GGX(Normal, l, v, h, F0, Albedo.xyz, roughness)*light.Color*atten;
-        //Out.y += 0.01;
-        
-        //return Out;
     }
     
-    //Out.xyz = 0.0;
+    if (EnvAmbientColor.w < 0.5) {
+        float NdotV = max(dot(Normal, v), 0.0);
+        
+        float3 kS = FresnelSchlickRoughness(F0, NdotV, roughness);
+        float3 kD = 1.0 - kS;
+        kD *= 1.0 - metallic;
+        
+        float3 irradiance = EnvIrradiance.Sample(EnvIrradianceSampler, Normal).rgb;
+        float3 diffuse    = irradiance * Albedo.xyz;
+        
+        float3 R = reflect(-v, Normal);
+        float MAX_REFLECTION_LOD = 4.0;
+        float3 prefilteredColor = EnvRadiance.SampleLevel(EnvRadianceSampler, R, roughness * MAX_REFLECTION_LOD).rgb;
+        float2 envBRDF  = brdfLUT.SampleLevel(brdfLUTSampler, float2(NdotV, roughness), 0).rg;
+        float3 specular = prefilteredColor * (kS * envBRDF.x + envBRDF.y);
+        float3 ambient = (kD * diffuse + specular);
+        Out.xyz += ambient;
+        
+//vec3 kS = F;
+//vec3 kD = 1.0 - kS;
+//kD *= 1.0 - metallic;
+//  
+//vec3 irradiance = texture(irradianceMap, N).rgb;
+//vec3 diffuse    = irradiance * albedo;
+//  
+//const float MAX_REFLECTION_LOD = 4.0;
+//vec3 prefilteredColor = textureLod(prefilterMap, R,  roughness * MAX_REFLECTION_LOD).rgb;   
+//vec2 envBRDF  = texture(brdfLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;
+//vec3 specular = prefilteredColor * (F * envBRDF.x + envBRDF.y);
+//  
+//vec3 ambient = (kD * diffuse + specular) * ao;         
+    }
+    
     return Out;
 }
 

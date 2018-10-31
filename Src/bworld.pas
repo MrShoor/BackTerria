@@ -19,6 +19,7 @@ uses
   bMiniParticles,
   bBassLight,
   bAutoColliders,
+  bCubeUtils,
   avBase,
   avTypes,
   avMesh,
@@ -206,11 +207,21 @@ type
     FGBuffer: TavFrameBuffer;
     FEmissionFBO: TavFrameBuffer;
 
+    FCubeUtils: TbCubeUtils;
+    FEnviromentFile: string;
+    FEnviromentCube: TEnviroment;
+    FEnviromentAmbient: TVec3;
+    FEnviromentAsColor: Boolean;
+    FbrdfLUT: TavTexture;
+
     FModelsProgram: TavProgram;
     FModelsProgram_NoLight: TavProgram;
     FModelsPBRProgram: TavProgram;
     FModelsShadowProgram: TavProgram;
     FModelsEmissionProgram: TavProgram;
+
+    FCubeDrawProgram: TavProgram;
+
     FModels: TavModelCollection;
     FPrefabs: IavMeshInstances;
   protected
@@ -247,6 +258,9 @@ type
     function Particles: TbParticleSystem;
 
     procedure PreloadModels(const AFiles: array of string);
+
+    procedure SetEnviromentAmbient(const AAmbientColor: TVec3);
+    procedure SetEnviromentCubemap(const AFileName: string);
   public
     property ModelsProgram_NoLight: TavProgram read FModelsProgram_NoLight;
     property ModelsCollection: TavModelCollection read FModels;
@@ -511,7 +525,7 @@ begin
   FPostProcess := TavPostProcess.Create(Self);
 
   //FGBuffer := Create_FrameBuffer(Self, [TTextureFormat.RGBA16f, TTextureFormat.RGBA, TTextureFormat.D32f], [false, false, false]);
-  FGBuffer := Create_FrameBuffer(Self, [TTextureFormat.RGBA, TTextureFormat.D32f], [true, false]);
+  FGBuffer := Create_FrameBuffer(Self, [TTextureFormat.RGBA16f, TTextureFormat.D32f], [false, false]);
   FEmissionFBO := Create_FrameBuffer(FGBuffer, [TTextureFormat.RGBA16f], [false]);
   (FEmissionFBO.GetColor(0) as TavTexture).AutoGenerateMips := True;
   FEmissionFBO.SetDepth(FGBuffer.GetDepth, 0);
@@ -527,7 +541,12 @@ begin
   FModelsShadowProgram.Load('avMesh_shadow', SHADERS_FROMRES, SHADERS_DIR);
   FModelsEmissionProgram := TavProgram.Create(Self);
   FModelsEmissionProgram.Load('avMesh_emission', SHADERS_FROMRES, SHADERS_DIR);
+  FCubeDrawProgram := TavProgram.Create(Self);
+  FCubeDrawProgram.Load('cubemap_out', SHADERS_FROMRES, SHADERS_DIR);
   FModels := TavModelCollection.Create(Self);
+
+  FCubeUtils := TbCubeUtils.Create(Self);
+  SetEnviromentAmbient(Vec(0.2,0.2,0.2));
 
   FPrefabs := TavMeshInstances.Create();
 
@@ -599,6 +618,21 @@ begin
 
   FLightRenderer.Render(FShadowPassAdapter);
 
+  if not FEnviromentAsColor then
+  begin
+    if FEnviromentFile <> '' then
+    begin
+      FCubeUtils.GenEnviromentFromCube(FEnviromentCube, Self, FEnviromentFile);
+      FEnviromentFile := '';
+    end;
+    if FbrdfLUT = nil then
+    begin
+      FbrdfLUT := TavTexture.Create(Self);
+      FbrdfLUT.TargetFormat := TTextureFormat.RG16f;
+      FCubeUtils.GenLUTbrdf(FbrdfLUT, 512);
+    end;
+  end;
+
   FGBuffer.FrameRect := RectI(Vec(0,0),Main.WindowSize);
   FGBuffer.Select;
 end;
@@ -606,9 +640,9 @@ end;
 procedure TbWorldRenderer.DrawWorld;
 const
     cSampler_Cubes : TSamplerInfo = (
-      MinFilter  : tfLinear;
-      MagFilter  : tfLinear;
-      MipFilter  : tfLinear;
+      MinFilter  : tfNearest;
+      MagFilter  : tfNearest;
+      MipFilter  : tfNearest;
       Anisotropy : 0;
       Wrap_X     : twClamp;
       Wrap_Y     : twClamp;
@@ -617,9 +651,9 @@ const
       Comparison : cfGreater;
     );
     cSampler_Cubes2 : TSamplerInfo = (
-      MinFilter  : tfLinear;
-      MagFilter  : tfLinear;
-      MipFilter  : tfLinear;
+      MinFilter  : tfNearest;
+      MagFilter  : tfNearest;
+      MipFilter  : tfNearest;
       Anisotropy : 0;
       Wrap_X     : twClamp;
       Wrap_Y     : twClamp;
@@ -651,6 +685,17 @@ begin
   prog.SetUniform('ShadowSpot1024', FLightRenderer.Spots1024, cSampler_Cubes2);
   prog.SetUniform('ShadowCube2048', FLightRenderer.Cubes2048, cSampler_Cubes2);
   prog.SetUniform('ShadowSpot2048', FLightRenderer.Spots2048, cSampler_Cubes2);
+  if FEnviromentAsColor then
+  begin
+    prog.SetUniform('EnvAmbientColor', Vec(FEnviromentAmbient, 1.0));
+  end
+  else
+  begin
+    prog.SetUniform('EnvAmbientColor', Vec(0.0,0.0,0.0,0.0));
+    prog.SetUniform('EnvRadiance', FEnviromentCube.Radiance, Sampler_Linear);
+    prog.SetUniform('EnvIrradiance', FEnviromentCube.Irradiance, Sampler_Linear);
+    prog.SetUniform('brdfLUT', FbrdfLUT, Sampler_Linear);
+  end;
   FModels.Select();
 
   //depth prepass
@@ -662,6 +707,17 @@ begin
   Main.States.DepthFunc := cfEqual;
   FModels.Draw(FAllModels);
   Main.States.DepthFunc := cfGreater;
+
+  if not FEnviromentAsColor then
+  begin
+    Main.States.DepthFunc := cfGreaterEqual;
+    FCubeDrawProgram.Select();
+    FCubeDrawProgram.SetUniform('uDepthRange', Main.Projection.DepthRange.y);
+    FCubeDrawProgram.SetUniform('Cube', FEnviromentCube.Radiance, Sampler_Linear);
+    FCubeDrawProgram.SetUniform('uSampleLevel', 1.2);
+    FCubeDrawProgram.Draw(ptTriangleStrip, cmNone, False, 0, 0, 4);
+    Main.States.DepthFunc := cfGreater;
+  end;
 
   //draw non depth objects
   Main.States.DepthWrite := False;
@@ -745,6 +801,19 @@ begin
     while newPrefabs.Next(inst_name, inst) do
       FPrefabs.Add(inst_name, inst);
   end;
+end;
+
+procedure TbWorldRenderer.SetEnviromentAmbient(const AAmbientColor: TVec3);
+begin
+  FEnviromentAmbient := AAmbientColor;
+  FEnviromentAsColor := True;
+end;
+
+procedure TbWorldRenderer.SetEnviromentCubemap(const AFileName: string);
+begin
+  if AFileName = '' then Exit;
+  FEnviromentAsColor := False;
+  FEnviromentFile := AFileName;
 end;
 
 { TbGameObject }
