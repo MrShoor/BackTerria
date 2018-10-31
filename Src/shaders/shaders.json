@@ -2,7 +2,7 @@
     "HLSLcc_lang" : 330,
     "HLSLcc_flags": ["HLSLCC_FLAG_DISABLE_GLOBALS_STRUCT",
                      "HLSLCC_FLAG_INOUT_SEMANTIC_NAMES",
-                     "HLSLCC_FLAG_DISABLE_EXPLICIT_LOCATIONS"],    
+                     "HLSLCC_FLAG_DISABLE_EXPLICIT_LOCATIONS"],
     "OGLTranslate" : false,
     "OutDir" : "!Out",
     "VertexEntry" : "VS",
@@ -16,65 +16,111 @@
     "Programs":[
         {
         "Name"     : "avMesh",
-	"Vertex"   : "avMesh.cpp",
-	"Fragment" : "avMesh.cpp",
-	"Path"     :["avMesh"]
+        "Vertex"   : "avMesh.cpp",
+        "Fragment" : "avMesh.cpp",
+        "Path"     :["avMesh"]
         },
         {
         "Name"     : "avMesh_NoLight",
-	"Vertex"   : "avMesh_NoLight.cpp",
-	"Fragment" : "avMesh_NoLight.cpp",
-	"Path"     :["avMesh"]
+        "Vertex"   : "avMesh_NoLight.cpp",
+        "Fragment" : "avMesh_NoLight.cpp",
+        "Path"     :["avMesh"]
         },
         {
         "Name"     : "avMeshPBR",
-	"Vertex"   : "avMesh_pbr.cpp",
-	"Fragment" : "avMesh_pbr.cpp",
-	"Path"     :["avMesh"]
+        "Vertex"   : "avMesh_pbr.cpp",
+        "Fragment" : "avMesh_pbr.cpp",
+        "Path"     :["avMesh"]
         },
         {
         "Name"     : "avMesh_shadow",
-	"Vertex"   : "avMesh_shadow.cpp",
+        "Vertex"   : "avMesh_shadow.cpp",
         "Geometry" : "avMesh_shadow.cpp",
-	"Fragment" : "avMesh_shadow.cpp",
-	"Path"     :["avMesh"]
+        "Fragment" : "avMesh_shadow.cpp",
+        "Path"     :["avMesh"]
         },
         {
         "Name"     : "avMesh_emission",
-	"Vertex"   : "avMesh_emission.cpp",
-	"Fragment" : "avMesh_emission.cpp",
-	"Path"     :["avMesh"]
+        "Vertex"   : "avMesh_emission.cpp",
+        "Fragment" : "avMesh_emission.cpp",
+        "Path"     :["avMesh"]
         },
         {
-            "Name" : "StupidCompose",
-            "Vertex" : "stupid_compose.cpp",
-            "Fragment" : "stupid_compose.cpp",
-            "Path":["postprocess"]
+        "Name"     : "StupidCompose",
+        "Vertex"   : "stupid_compose.cpp",
+        "Fragment" : "stupid_compose.cpp",
+        "Path"     :["postprocess"]
         },        
         {
-            "Name" : "PostProcess1",
-            "Vertex" : "post_process.cpp",
-            "Fragment" : "post_process.cpp",
-            "Path":["postprocess"]
+        "Name"     : "PostProcess1",
+        "Vertex"   : "post_process.cpp",
+        "Fragment" : "post_process.cpp",
+        "Path"     :["postprocess"]
         },
         {
-            "Name" : "Blur",
-            "Vertex" : "blur.cpp",
-            "Fragment" : "blur.cpp",
-            "Path":["postprocess"]
+        "Name"     : "Blur",
+        "Vertex"   : "blur.cpp",
+        "Fragment" : "blur.cpp",
+        "Path"     :["postprocess"]
         },
         {
-            "Name" : "Lighting_render_clusters",
-            "Compute" : "render_clusters.cpp",
-            "Path":["clustered"]
+        "Name"     : "Lighting_render_clusters",
+        "Compute"  : "render_clusters.cpp",
+        "Path"     :["clustered"]
+        },
+        {
+        "Name"          : "irradiance_gen",
+        "Vertex"        : "cube_gen.cpp",
+        "Geometry"      : "cube_gen.cpp",
+        "Fragment"      : "cube_gen.cpp",
+        "FragmentEntry" : "PS_Irradiance",
+        "Path"          :["EnviromentGen"]
+        },
+        {
+        "Name"          : "radiance_gen",
+        "Vertex"        : "cube_gen.cpp",
+        "Geometry"      : "cube_gen.cpp",
+        "Fragment"      : "cube_gen.cpp",
+        "FragmentEntry" : "PS_Radiance",
+        "Path"          :["EnviromentGen"]
+        },
+        {
+        "Name"     : "lut_gen",
+        "Vertex"   : "brdfLUT_gen.cpp",
+        "Fragment" : "brdfLUT_gen.cpp",
+        "Path"     :["EnviromentGen"]
+        },
+        {
+        "Name"     : "cubemap_test_out",
+        "Vertex"   : "cubemap_test_out.cpp",
+        "Fragment" : "cubemap_test_out.cpp",
+        "Path"     :["EnviromentGen"]
         }
     ],
     "_Programs":[
         {
         "Name"     : "avMeshTest",
-	"Vertex"   : "avMesh_test.cpp",
-	"Fragment" : "avMesh_test.cpp",
-	"Path"     :["avMesh"]
+        "Vertex"   : "avMesh_test.cpp",
+        "Fragment" : "avMesh_test.cpp",
+        "Path"     :["avMesh"]
+        },
+        {
+        "Name"     : "lut_gen",
+        "Vertex"   : "brdfLUT_gen.cpp",
+        "Fragment" : "brdfLUT_gen.cpp",
+        "Path"     :["EnviromentGen"]
+        },
+        {
+        "Name"     : "StupidCompose",
+        "Vertex"   : "stupid_compose.cpp",
+        "Fragment" : "stupid_compose.cpp",
+        "Path"     :["postprocess"]
+        },
+        {
+        "Name"     : "cubemap_test_out",
+        "Vertex"   : "cubemap_test_out.cpp",
+        "Fragment" : "cubemap_test_out.cpp",
+        "Path"     :["EnviromentGen"]
         }
     ]
 }

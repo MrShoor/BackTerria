@@ -14,7 +14,7 @@
         <CustomOptions Value="-Oodfa"/>
       </Other>
     </CompilerOptions>
-    <Files Count="14">
+    <Files Count="15">
       <Item1>
         <Filename Value="bworld.pas"/>
         <UnitName Value="bWorld"/>
@@ -71,6 +71,10 @@
         <Filename Value="bautocolliders.pas"/>
         <UnitName Value="bAutoColliders"/>
       </Item14>
+      <Item15>
+        <Filename Value="bcubeutils.pas"/>
+        <UnitName Value="bcubeutils"/>
+      </Item15>
     </Files>
     <RequiredPkgs Count="2">
       <Item1>
