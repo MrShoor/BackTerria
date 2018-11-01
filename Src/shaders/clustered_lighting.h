@@ -525,7 +525,7 @@ float4 Clustered_GGX(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 Nor
         i++;
         
         Light light = light_list[node.LightIdx];
-        light.Color = light.Color*2;
+        light.Color = light.Color;
 
         float3 l = light.PosRange.xyz - WorldPos;
         float dist = length(l);
@@ -551,18 +551,17 @@ float4 Clustered_GGX(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 Nor
         float3 kS = FresnelSchlickRoughness(F0, NdotV, roughness);
         float3 kD = 1.0 - kS;
         kD *= 1.0 - metallic;
-        
-        float3 irradiance = EnvIrradiance.Sample(EnvIrradianceSampler, Normal).rgb;
+                
+        float3 irradiance = EnvIrradiance.Sample(EnvIrradianceSampler, mul(Normal, (float3x3)V_InverseMatrix)).rgb;
         float3 diffuse    = irradiance * Albedo.xyz;
         
         float3 R = reflect(-v, Normal);
         float MAX_REFLECTION_LOD = 4.0;
-        float3 prefilteredColor = EnvRadiance.SampleLevel(EnvRadianceSampler, R, roughness * MAX_REFLECTION_LOD).rgb;
+        float3 prefilteredColor = EnvRadiance.SampleLevel(EnvRadianceSampler, mul(R, (float3x3)V_InverseMatrix), roughness * MAX_REFLECTION_LOD).rgb;
         float2 envBRDF  = brdfLUT.SampleLevel(brdfLUTSampler, float2(NdotV, roughness), 0).rg;
         float3 specular = prefilteredColor * (kS * envBRDF.x + envBRDF.y);
         float3 ambient = (kD * diffuse + specular);
-        Out.xyz += ambient;
-        
+        Out.xyz += ambient;        
 //vec3 kS = F;
 //vec3 kD = 1.0 - kS;
 //kD *= 1.0 - metallic;

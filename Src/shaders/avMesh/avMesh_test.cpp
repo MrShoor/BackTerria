@@ -91,23 +91,26 @@ PS_Output PS(VS_Output In) {
 //        }
         
         norm = UnpackNormal(m.Geometry_Normal(In.vTex, float4(0.5,0.5,1,0)));
+        //norm.x = -norm.x;
         norm = mul(norm, tbn);
         norm = normalize(norm);
     }
     
     float4 diff = m.Diffuse_Color(In.vTex, m.Diff);
-    //diff = 0.7;
+//    diff = 0.7;
     float spec = m.Specular_Intensity(In.vTex, m.Spec).r;
     //spec = 1.0;
     diff = pow(abs(diff), 2.2);
     
-    
-    float metallic = 0.01;//spec;
+    float metallic = spec;
     float4 albedo = diff;
-    float roughness = 0.85;
+    float roughness = m.Geometry_Hardness(In.vTex, m.Hardness_IOR_EmitFactor.x/512).x;
     
-    float3 F0 = 0.04;
+    float3 F0 = 0.01;
     F0 = lerp(F0, albedo.xyz, metallic);
+    
+//    Out.Color.xyz = F0.xyz;
+//    return Out;    
     
     //float4 Clustered_GGX(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 Normal, float3 ViewDir, float4 Albedo, float3 Ambient, float3 F0, float roughness) {
     
