@@ -47,10 +47,10 @@ type
     FPos: TVec3;
     FRot: TQuat;
     FScale: Single;
-    FTransformValid: Boolean;
     FTransform: TMat4;
     FTransformInv: TMat4;
   protected
+    FTransformValid: Boolean;
     procedure ValidateTransform; virtual;
     procedure InvalidateTransform; virtual;
     function  GetPos: TVec3; virtual;
@@ -849,6 +849,7 @@ procedure TbGameObject.ValidateTransform;
 var i: Integer;
 begin
   if FTransformValid then Exit;
+  FTransformValid := True;
   FTransform := MatScale(Vec(FScale, FScale, FScale)) * Mat4(Rot, Pos);
   FTransformInv := Inv(FTransform);
 
