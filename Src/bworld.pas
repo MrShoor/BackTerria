@@ -254,6 +254,7 @@ type
     function CreatePointLight(): IavPointLight;
     function CreateSpotLight(): IavSpotLight;
 
+    function FindPrefabInstances(const AName: string): IavMeshInstance;
     function CreateModelInstances(const ANames: array of string): IavModelInstanceArr;
     function Particles: TbParticleSystem;
 
@@ -759,14 +760,19 @@ begin
   }
 end;
 
-function TbWorldRenderer.CreatePointLight: IavPointLight;
+function TbWorldRenderer.CreatePointLight(): IavPointLight;
 begin
   Result := FLightRenderer.AddPointLight();
 end;
 
-function TbWorldRenderer.CreateSpotLight: IavSpotLight;
+function TbWorldRenderer.CreateSpotLight(): IavSpotLight;
 begin
   Result := FLightRenderer.AddSpotLight();
+end;
+
+function TbWorldRenderer.FindPrefabInstances(const AName: string): IavMeshInstance;
+begin
+  if not FPrefabs.TryGetValue(AName, Result) then Result := nil;
 end;
 
 function TbWorldRenderer.CreateModelInstances(const ANames: array of string): IavModelInstanceArr;
