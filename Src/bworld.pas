@@ -8,12 +8,10 @@ unit bWorld;
 interface
 
 uses
-  intfUtils,
   Classes, SysUtils,
   avRes,
   avContnrs,
   mutils,
-  bTypes,
   bLights,
   bPostProcess,
   bMiniParticles,
@@ -516,7 +514,6 @@ begin
 end;
 
 procedure TbWorldRenderer.AfterRegister;
-var tex: TavTexture;
 begin
   inherited AfterRegister;
   FLightRenderer := TavLightRenderer.Create(Self);
@@ -640,17 +637,17 @@ end;
 
 procedure TbWorldRenderer.DrawWorld;
 const
-    cSampler_Cubes : TSamplerInfo = (
-      MinFilter  : tfNearest;
-      MagFilter  : tfNearest;
-      MipFilter  : tfNearest;
-      Anisotropy : 0;
-      Wrap_X     : twClamp;
-      Wrap_Y     : twClamp;
-      Wrap_Z     : twClamp;
-      Border     : (x: 0; y: 0; z: 0; w: 0);
-      Comparison : cfGreater;
-    );
+    //cSampler_Cubes : TSamplerInfo = (
+    //  MinFilter  : tfNearest;
+    //  MagFilter  : tfNearest;
+    //  MipFilter  : tfNearest;
+    //  Anisotropy : 0;
+    //  Wrap_X     : twClamp;
+    //  Wrap_Y     : twClamp;
+    //  Wrap_Z     : twClamp;
+    //  Border     : (x: 0; y: 0; z: 0; w: 0);
+    //  Comparison : cfGreater;
+    //);
     cSampler_Cubes2 : TSamplerInfo = (
       MinFilter  : tfNearest;
       MagFilter  : tfNearest;
@@ -660,17 +657,17 @@ const
       Wrap_Y     : twClamp;
       Wrap_Z     : twClamp;
       Border     : (x: 0; y: 0; z: 0; w: 0);
+      Comparison : cfNever;
     );
 var prog: TavProgram;
-    i: Integer;
     gobj: TbGraphicalObject;
 begin
   Main.States.CullMode := cmBack;
 
-  if True then
-    prog := FModelsPBRProgram
-  else
-    prog := FModelsProgram;
+  //if True then
+    prog := FModelsPBRProgram;
+  //else
+    //prog := FModelsProgram;
   prog.Select();
   prog.SetUniform('depthRange', Main.Projection.DepthRange);
   prog.SetUniform('planesNearFar', Vec(Main.Projection.NearPlane, Main.Projection.FarPlane));

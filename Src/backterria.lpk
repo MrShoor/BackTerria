@@ -11,6 +11,9 @@
         <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
       </SearchPaths>
       <Other>
+        <CompilerMessages>
+          <IgnoredMessages idx5024="True"/>
+        </CompilerMessages>
         <CustomOptions Value="-Oodfa"/>
       </Other>
     </CompilerOptions>
@@ -73,7 +76,7 @@
       </Item14>
       <Item15>
         <Filename Value="bcubeutils.pas"/>
-        <UnitName Value="bcubeutils"/>
+        <UnitName Value="bCubeUtils"/>
       </Item15>
     </Files>
     <RequiredPkgs Count="2">

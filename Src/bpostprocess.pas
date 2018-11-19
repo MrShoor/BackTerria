@@ -72,7 +72,6 @@ procedure TavPostProcess.AfterRegister;
   var mip: ITextureMip;
       pv: PVec4;
       i: Integer;
-      l: Single;
   begin
     Result := EmptyTexData(S, S, TTextureFormat.RGBA32f, false, True);
     mip := Result.MipData(0, 0);

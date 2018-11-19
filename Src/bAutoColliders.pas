@@ -684,8 +684,6 @@ procedure TAutoCollidersGroup.ResolveCollision(const AOtherCollider: ICollider);
 var vThis, vOther: TVec3;
     thisI: ICollider;
     thisColType, otherColType: TColliderType;
-
-    s1, s2: string;
 begin
   thisI := FCurrentCollider;
   if AOtherCollider = thisI then Exit;

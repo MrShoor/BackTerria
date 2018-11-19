@@ -198,10 +198,10 @@ type
     constructor Create(const AWorld: TPhysWorld; const AColliders: array of IPhysCollider; const ATransforms: array of TMat4); overload;
   end;
 
-  TMaterial = class (TPhysChild, IPhysMaterial)
-  private
-  public
-  end;
+  //TMaterial = class (TPhysChild, IPhysMaterial)
+  //private
+  //public
+  //end;
 
   { TBody }
 

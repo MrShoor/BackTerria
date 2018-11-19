@@ -212,7 +212,6 @@ procedure TbCubeUtils.AfterConstruction;
   end;
 
 var mProj: TMat4;
-    mProjInv: TMat4;
     i: Integer;
     mView: array [0..5] of TMat4;
 
