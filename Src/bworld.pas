@@ -857,11 +857,14 @@ begin
   FTransformInv := Inv(FTransform);
 
   for i := 0 to FModels.Count - 1 do
-    FModels[i].Mesh.Transform := FTransform;
+    if FModels[i].Mesh <> nil then
+      FModels[i].Mesh.Transform := FTransform;
   for i := 0 to FEmissive.Count - 1 do
-    FEmissive[i].Mesh.Transform := FTransform;
+    if FEmissive[i].Mesh <> nil then
+      FEmissive[i].Mesh.Transform := FTransform;
   for i := 0 to FTransparent.Count - 1 do
-    FTransparent[i].Mesh.Transform := FTransform;
+    if FTransparent[i].Mesh <> nil then
+      FTransparent[i].Mesh.Transform := FTransform;
 end;
 
 procedure TbGameObject.InvalidateTransform;
