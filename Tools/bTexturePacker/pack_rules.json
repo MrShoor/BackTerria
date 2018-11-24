@@ -1,0 +1,53 @@
+{
+  "Jobs" : 
+  [
+    {
+	  "Src" : "C:\\MyProj\\CourageTrial\\bin\\models\\scene1.avm",
+	  "Dst" : "models_packed\\scene1.avm",
+	  "Resize" : 
+	  [
+		{ 
+		  "MeshName" : "BezierCurve_streetLamp4",
+		  "TexSizeX" : 512,
+		  "TexSizeY" : 512
+		},
+		{
+		  "MeshName" : "Untitled",
+		  "TexSizeX" : 512,
+		  "TexSizeY" : 512		  
+		}
+	  ],
+	  "CopyChannel" :
+	  [
+	    {
+		  "Src" : "texkSpecular_Hardness",
+		  "SrcChannel" : 0,
+		  "SrcColor" : "matSpecHardness",
+		  "Dst" : "texkSpecular_Hardness",
+		  "DstChannel" : 0
+		},
+	    {
+		  "Src" : "texkShading_Ambient",
+		  "SrcChannel" : 0,
+		  "SrcColor" : 255,
+		  "Dst" : "texkSpecular_Hardness",
+		  "DstChannel" : 1
+		},
+	    {
+		  "Src" : "texkSpecular_Intensity",
+		  "SrcChannel" : 0,
+		  "SrcColor" : "matSpec",
+		  "Dst" : "texkSpecular_Hardness",
+		  "DstChannel" : 2
+		},
+	    {
+		  "Src" : "texkGeometry_Displace",
+		  "SrcChannel" : 0,
+		  "SrcColor" : 255,
+		  "Dst" : "texkSpecular_Hardness",
+		  "DstChannel" : 3
+		}
+	  ]
+	}
+  ]
+}
