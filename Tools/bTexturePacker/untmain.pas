@@ -8,7 +8,7 @@ interface
 
 uses
   Windows,
-  Classes, SysUtils, avTypes, avMesh, untJobs, Imaging, ImagingTypes, ImagingUtility, mutils;
+  Classes, SysUtils, avTypes, avMesh, avContnrs, untJobs, Imaging, ImagingTypes, ImagingUtility, mutils;
 
 type
   TCopyFrom = packed record
@@ -27,6 +27,9 @@ type
   { TCallBackHandler }
 
   TCallBackHandler = class(TInterfacedObject, IMeshLoaderCallback)
+  private type
+    ITexRemap = {$IfDef FPC}specialize{$EndIf}IHashMap<string, string>;
+    TTexRemap = {$IfDef FPC}specialize{$EndIf}THashMap<string, string>;
   private
     FJob: IJob;
     FDestDir: string;
@@ -38,8 +41,13 @@ type
 
     FNewTextures: array [TMeshMaterialTextureKind] of TNewTexture;
 
+    FTexRemap: ITexRemap;
+
     procedure WriteAllNewTextures();
+    procedure WriteTexRemap();
     function GetColorFromRule(const ARule: TRule_CopyChannel): Byte;
+
+    function Hook_TextureFilename(const ATextureFilename: string): string;
 
     procedure OnLoadingMesh(const AMesh: string);
     procedure OnLoadingMaterial(const AMaterial: TMeshMaterial);
@@ -49,11 +57,27 @@ type
     destructor Destroy; override;
   end;
 
-procedure DoWork;
+procedure DoWork(); overload;
+procedure DoWork(const AJobsFile: string); overload;
 
 implementation
 
-procedure DoWork;
+procedure DoWork();
+begin
+  if ParamCount < 1 then
+  begin
+    WriteLn('Job file required as first param');
+    Exit;
+  end;
+  if not FileExists(ParamStr(1)) then
+  begin
+    WriteLn('File not exists: "' + ParamStr(1) + '"');
+    Exit;
+  end;
+  DoWork(ParamStr(1));
+end;
+
+procedure DoWork(const AJobsFile: string);
 var handler: IMeshLoaderCallback;
     jobs: IJobArr;
     i: Integer;
@@ -67,6 +91,8 @@ begin
       WriteLn('WARNING! File "' + jobs[i].SrcFile + '" not found');
       Continue;
     end;
+    WriteLn('Job: "' + jobs[i].SrcFile + '" to "' + jobs[i].DstFile + '"');
+
     handler := TCallBackHandler.Create(jobs[i]);
     ForceDirectories(ExtractFileDir(jobs[i].DstFile));
     LoadInstancesFromFile(jobs[i].SrcFile, nil, handler);
@@ -115,11 +141,6 @@ begin
     if FCurrentMeshTexSizeX > 0 then
       newTexSize := Vec(FCurrentMeshTexSizeX, FCurrentMeshTexSizeY);
 
-    if FCurrentMesh = 'Untitled' then
-    begin
-      WriteLn('Untitled');
-    end;
-
     for i := 0 to 3 do
     begin
       if FNewTextures[tk].copyfrom[i].exists then
@@ -167,6 +188,27 @@ begin
   ZeroClear(FNewTextures, SizeOf(FNewTextures));
 end;
 
+procedure TCallBackHandler.WriteTexRemap();
+var fs: TFileStream;
+    n: Integer;
+    mapFrom, mapTo: string;
+begin
+  fs := TFileStream.Create(FJob.DstFile+'.texremap', fmCreate);
+  try
+    n := FTexRemap.Count;
+    fs.WriteBuffer(n, SizeOf(n));
+
+    FTexRemap.Reset;
+    while FTexRemap.Next(mapFrom, mapTo) do
+    begin
+      StreamWriteString(fs, mapFrom);
+      StreamWriteString(fs, mapTo);
+    end;
+  finally
+    FreeAndNil(fs);
+  end;
+end;
+
 function TCallBackHandler.GetColorFromRule(const ARule: TRule_CopyChannel): Byte;
 begin
   if ARule.SrcColorStr = '' then Exit(ARule.SrcColor);
@@ -181,6 +223,11 @@ begin
   if ARule.SrcColorStr = 'matSpecIOR' then
     Exit(Clamp( Round( FCurrentMaterial.matSpecIOR * 255 ), 0, 255));
   Result := 0;
+end;
+
+function TCallBackHandler.Hook_TextureFilename(const ATextureFilename: string): string;
+begin
+  Result := ATextureFilename;
 end;
 
 procedure TCallBackHandler.OnLoadingMesh(const AMesh: string);
@@ -199,13 +246,12 @@ begin
     FCurrentMeshTexSizeX := -1;
     FCurrentMeshTexSizeY := -1;
   end;
-  WriteLn('New mesh: ' + AMesh);
+  WriteLn('    Processing mesh: "' + AMesh + '"');
 end;
 
 procedure TCallBackHandler.OnLoadingMaterial(const AMaterial: TMeshMaterial);
 begin
   FCurrentMaterial := AMaterial;
-  WriteLn('New material');
 end;
 
 procedure TCallBackHandler.OnLoadingTexture(
@@ -216,6 +262,7 @@ var rules: IRule_CopyChannelArr;
   inRules: Boolean;
   i: Integer;
   pSrcImg: PImageData;
+  dstLocalName: string;
 begin
   inRules := False;
   rules := FJob.Rules_CopyChannel;
@@ -225,8 +272,10 @@ begin
     if rule^.Src = AKind then
     begin
       inRules := True;
+      dstLocalName := FCurrentMesh + '_' + GetMaterialTextureKindName(rule^.Dst) + '.png';
+      FTexRemap.AddOrSet(AFileName, dstLocalName);
       if FNewTextures[rule^.Dst].dstfilename = '' then
-        FNewTextures[rule^.Dst].dstfilename := FDestDir + '\' + FCurrentMesh + '_' + GetMaterialTextureKindName(rule^.Dst) + '.png';
+        FNewTextures[rule^.Dst].dstfilename := FDestDir + '\' + dstLocalName;
 
       Assert(not FNewTextures[rule^.Dst].copyfrom[rule^.DstChannel].exists);
       FNewTextures[rule^.Dst].copyfrom[rule^.DstChannel].exists := True;
@@ -259,11 +308,13 @@ constructor TCallBackHandler.Create(const AJob: IJob);
 begin
   FJob := AJob;
   FDestDir := ExtractFileDir(AJob.DstFile);
+  FTexRemap := TTexRemap.Create();
 end;
 
 destructor TCallBackHandler.Destroy;
 begin
   WriteAllNewTextures();
+  WriteTexRemap();
   inherited Destroy;
 end;
 

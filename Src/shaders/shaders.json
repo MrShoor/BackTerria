@@ -95,9 +95,7 @@
         "Vertex"   : "cubemap_out.cpp",
         "Fragment" : "cubemap_out.cpp",
         "Path"     :["EnviromentGen"]
-        }
-    ],
-    "_Programs":[
+        },
         {
         "Name"     : "avMeshTest",
         "Vertex"   : "avMesh_test.cpp",
@@ -105,10 +103,18 @@
         "Path"     :["avMesh"]
         },
         {
-        "Name"     : "StupidCompose",
-        "Vertex"   : "stupid_compose.cpp",
-        "Fragment" : "stupid_compose.cpp",
-        "Path"     :["postprocess"]
+        "Name"     : "avMeshPbrPacked",
+        "Vertex"   : "avMesh_pbr_packed.cpp",
+        "Fragment" : "avMesh_pbr_packed.cpp",
+        "Path"     :["avMesh"]
+        }
+    ],
+    "_Programs":[
+        {
+        "Name"     : "avMeshPbrPacked",
+        "Vertex"   : "avMesh_pbr_packed.cpp",
+        "Fragment" : "avMesh_pbr_packed.cpp",
+        "Path"     :["avMesh"]
         }
     ]
 }

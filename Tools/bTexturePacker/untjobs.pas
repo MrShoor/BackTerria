@@ -65,12 +65,55 @@ type
     function Rules_Resize: IRule_ResizeMap;
     function Rules_CopyChannel: IRule_CopyChannelArr;
 
-    constructor Create(const ASO: ISuperObject);
+    constructor Create(const ASO: ISuperObject; const ARules_CopyChannel: IRule_CopyChannelArr);
   end;
 
 procedure RaiseError(msg: string);
 begin
   raise EJsonParseException.Create(msg);
+end;
+
+function StrToTextureKind(const AStr: string): TMeshMaterialTextureKind;
+var tk: TMeshMaterialTextureKind;
+begin
+  for tk := Low(TMeshMaterialTextureKind) to High(TMeshMaterialTextureKind) do
+    if AStr = GetMaterialTextureKindName(tk) then
+      Exit(tk);
+  RaiseError('Wrong texture kind: "' + AStr + '"');
+  Result := TMeshMaterialTextureKind.texkDiffuse_Alpha;
+end;
+
+function Parse_Rules_CopyChannel(const ASO: ISuperObject): IRule_CopyChannelArr;
+var
+  sarr: TSuperArray;
+  i: Integer;
+  new_Channel: TRule_CopyChannel;
+begin
+  Result := TRule_CopyChannelArr.Create();
+
+  if ASO.O['CopyChannel'] <> nil then
+  begin
+    if not ASO.O['CopyChannel'].IsType(stArray) then RaiseError('"CopyChannel" is not array');
+    sarr := ASO.O['CopyChannel'].AsArray;
+    for i := 0 to sarr.Length - 1 do
+    begin
+      new_Channel.Src := StrToTextureKind(string(sarr.O[i].S['Src']));
+      new_Channel.Dst := StrToTextureKind(string(sarr.O[i].S['Dst']));
+      new_Channel.SrcChannel := sarr.O[i].I['SrcChannel'];
+      new_Channel.DstChannel := sarr.O[i].I['DstChannel'];
+      if sarr.O[i].O['SrcColor'].IsType(stString) then
+      begin
+        new_Channel.SrcColorStr := string(sarr.O[i].S['SrcColor']);
+        new_Channel.SrcColor := 0;
+      end
+      else
+      begin
+        new_Channel.SrcColorStr := '';
+        new_Channel.SrcColor := sarr.O[i].I['SrcColor'];
+      end;
+      Result.Add(new_Channel);
+    end;
+  end;
 end;
 
 function ParseJobs(const AFileName: string): IJobArr;
@@ -83,13 +126,17 @@ end;
 function ParseJobs(const ASO: ISuperObject): IJobArr;
 var sarr: TSuperArray;
     i: Integer;
+    rules_CopyChannel: IRule_CopyChannelArr;
 begin
   if ASO.O['Jobs'] = nil then RaiseError('"Jobs" not found');
   if not ASO.O['Jobs'].IsType(stArray) then RaiseError('"Jobs" is not array');
+
+  rules_CopyChannel := Parse_Rules_CopyChannel(ASO);
+
   sarr := ASO.O['Jobs'].AsArray;
   Result := TJobArr.Create();
   for i := 0 to sarr.Length - 1 do
-    Result.Add(TJob.Create(sarr.O[i]));
+    Result.Add(TJob.Create(sarr.O[i], rules_CopyChannel));
 end;
 
 { TJob }
@@ -114,25 +161,12 @@ begin
   Result := FRules_CopyChannel;
 end;
 
-constructor TJob.Create(const ASO: ISuperObject);
-
-  function StrToTextureKind(const AStr: string): TMeshMaterialTextureKind;
-  var tk: TMeshMaterialTextureKind;
-  begin
-    for tk := Low(TMeshMaterialTextureKind) to High(TMeshMaterialTextureKind) do
-      if AStr = GetMaterialTextureKindName(tk) then
-        Exit(tk);
-    RaiseError('Wrong texture kind: "' + AStr + '"');
-    Result := TMeshMaterialTextureKind.texkDiffuse_Alpha;
-  end;
-
+constructor TJob.Create(const ASO: ISuperObject; const ARules_CopyChannel: IRule_CopyChannelArr);
 var sarr: TSuperArray;
     i: Integer;
     new_Resize: TRule_Resize;
-    new_Channel: TRule_CopyChannel;
 begin
   FRules_Resize := TRule_ResizeMap.Create();
-  FRules_CopyChannel := TRule_CopyChannelArr.Create();
 
   FSrcFile := ExpandFileName( string(ASO.S['Src']) );
   FDstFile := ExpandFileName( string(ASO.S['Dst']) );
@@ -145,33 +179,14 @@ begin
       new_Resize.MeshName := string(sarr.O[i].S['MeshName']);
       new_Resize.TexSizeX := sarr.O[i].I['TexSizeX'];
       new_Resize.TexSizeY := sarr.O[i].I['TexSizeY'];
+      if FRules_Resize.Contains(new_Resize.MeshName) then
+        RaiseError('Duplicate mesh: ' + new_Resize.MeshName);
       FRules_Resize.Add(new_Resize.MeshName, new_Resize);
     end;
   end;
 
-  if ASO.O['CopyChannel'] <> nil then
-  begin
-    if not ASO.O['CopyChannel'].IsType(stArray) then RaiseError('"CopyChannel" is not array');
-    sarr := ASO.O['CopyChannel'].AsArray;
-    for i := 0 to sarr.Length - 1 do
-    begin
-      new_Channel.Src := StrToTextureKind(string(sarr.O[i].S['Src']));
-      new_Channel.Dst := StrToTextureKind(string(sarr.O[i].S['Dst']));
-      new_Channel.SrcChannel := sarr.O[i].I['SrcChannel'];
-      new_Channel.DstChannel := sarr.O[i].I['DstChannel'];
-      if sarr.O[i].O['SrcColor'].IsType(stString) then
-      begin
-        new_Channel.SrcColorStr := string(sarr.O[i].S['SrcColor']);
-        new_Channel.SrcColor := 0;
-      end
-      else
-      begin
-        new_Channel.SrcColorStr := '';
-        new_Channel.SrcColor := sarr.O[i].I['SrcColor'];
-      end;
-      FRules_CopyChannel.Add(new_Channel);
-    end;
-  end;
+  FRules_CopyChannel := Parse_Rules_CopyChannel(ASO);
+  FRules_CopyChannel.AddArray(ARules_CopyChannel);
 end;
 
 end.

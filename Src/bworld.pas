@@ -313,7 +313,74 @@ implementation
 
 uses avTexLoader;
 
+type
+
+  { TTexRemapper }
+
+  TTexRemapper = class(TInterfacedObject, IMeshLoaderCallback)
+  private type
+    ITexRemap = {$IfDef FPC}specialize{$EndIf} IHashMap<string, string>;
+    TTexRemap = {$IfDef FPC}specialize{$EndIf} THashMap<string, string>;
+  private
+    FTexRemap: ITexRemap;
+    function Hook_TextureFilename(const ATextureFilename: string): string;
+
+    procedure OnLoadingMesh(const AMesh: string);
+    procedure OnLoadingMaterial(const AMaterial: TMeshMaterial);
+    procedure OnLoadingTexture(const AKind: TMeshMaterialTextureKind; const AFileName: string; const ASize: TVec2i; const AFactor: Single);
+  public
+    constructor Create(const AFileName: string);
+  end;
+
 var gvCounter: Int64;
+
+{ TTexRemapper }
+
+function TTexRemapper.Hook_TextureFilename(const ATextureFilename: string): string;
+begin
+  if not FTexRemap.TryGetValue(ATextureFilename, Result) then
+    Result := ATextureFilename;
+end;
+
+procedure TTexRemapper.OnLoadingMesh(const AMesh: string);
+begin
+
+end;
+
+procedure TTexRemapper.OnLoadingMaterial(const AMaterial: TMeshMaterial);
+begin
+
+end;
+
+procedure TTexRemapper.OnLoadingTexture(const AKind: TMeshMaterialTextureKind;
+  const AFileName: string; const ASize: TVec2i; const AFactor: Single);
+begin
+
+end;
+
+constructor TTexRemapper.Create(const AFileName: string);
+var fs: TFileStream;
+    n, i: Integer;
+    src, dst: AnsiString;
+begin
+  FTexRemap := TTexRemap.Create();
+  if FileExists(AFileName) then
+  begin
+    fs := TFileStream.Create(AFileName, fmOpenRead);
+    try
+      fs.ReadBuffer(n, SizeOf(n));
+      FTexRemap.Capacity := NextPow2(n)*2;
+      for i := 0 to n - 1 do
+      begin
+        StreamReadString(fs, src);
+        StreamReadString(fs, dst);
+        FTexRemap.AddOrSet(src, dst);
+      end;
+    finally
+      FreeAndNil(fs);
+    end;
+  end;
+end;
 
 { TbGraphicalObject }
 
@@ -534,7 +601,8 @@ begin
   FModelsProgram_NoLight.Load('avMesh_NoLight', SHADERS_FROMRES, SHADERS_DIR);
   FModelsPBRProgram := TavProgram.Create(Self);
   //FModelsPBRProgram.Load('avMeshPBR', SHADERS_FROMRES, SHADERS_DIR);
-  FModelsPBRProgram.Load('avMeshTest', SHADERS_FROMRES, SHADERS_DIR);
+  //FModelsPBRProgram.Load('avMeshTest', SHADERS_FROMRES, SHADERS_DIR);
+  FModelsPBRProgram.Load('avMeshPbrPacked', SHADERS_FROMRES, SHADERS_DIR);
   FModelsShadowProgram := TavProgram.Create(Self);
   FModelsShadowProgram.Load('avMesh_shadow', SHADERS_FROMRES, SHADERS_DIR);
   FModelsEmissionProgram := TavProgram.Create(Self);
@@ -796,10 +864,18 @@ var
   newPrefabs: IavMeshInstances;
   inst_name: string;
   inst: IavMeshInstance;
+  remapFile: string;
+  remapper: IMeshLoaderCallback;
 begin
   for i := Low(AFiles) to High(AFiles) do
   begin
-    newPrefabs := LoadInstancesFromFile(AFiles[i]);
+    remapFile := AFiles[i]+'.texremap';
+    if FileExists(remapFile) then
+      remapper := TTexRemapper.Create(remapFile)
+    else
+      remapper := nil;
+
+    newPrefabs := LoadInstancesFromFile(AFiles[i], nil, remapper);
     newPrefabs.Reset;
     while newPrefabs.Next(inst_name, inst) do
       FPrefabs.Add(inst_name, inst);
