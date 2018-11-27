@@ -100,6 +100,9 @@ type
   IbGameObjSet = {$IfDef FPC}specialize{$EndIf}IHashSet<TbGameObject>;
   TbGameObjClass = class of TbGameObject;
 
+  IbGameObjTree = {$IfDef FPC}specialize{$EndIf}ILooseOctTree<TbGameObject>;
+  TbGameObjTree = {$IfDef FPC}specialize{$EndIf}TLooseOctTree<TbGameObject>;
+
   { TbCollisionObject }
 
   TbCollisionObject = class (TbGameObject)
@@ -269,6 +272,8 @@ type
 
   TbWorld = class (TavMainRenderChild)
   private
+    FTree: IbGameObjTree;
+
     FObjects   : IbGameObjSet;
     FToDestroy : IbGameObjSet;
     FUpdateSubs: IbGameObjSet;
@@ -704,18 +709,9 @@ begin
 end;
 
 procedure TbWorldRenderer.DrawWorld;
-const
-    //cSampler_Cubes : TSamplerInfo = (
-    //  MinFilter  : tfNearest;
-    //  MagFilter  : tfNearest;
-    //  MipFilter  : tfNearest;
-    //  Anisotropy : 0;
-    //  Wrap_X     : twClamp;
-    //  Wrap_Y     : twClamp;
-    //  Wrap_Z     : twClamp;
-    //  Border     : (x: 0; y: 0; z: 0; w: 0);
-    //  Comparison : cfGreater;
-    //);
+
+  procedure SelectModelsProgram(const prog: TavProgram);
+  const
     cSampler_Cubes2 : TSamplerInfo = (
       MinFilter  : tfNearest;
       MagFilter  : tfNearest;
@@ -727,6 +723,24 @@ const
       Border     : (x: 0; y: 0; z: 0; w: 0);
       Comparison : cfNever;
     );
+  begin
+    prog.Select();
+    prog.SetUniform('depthRange', Main.Projection.DepthRange);
+    prog.SetUniform('planesNearFar', Vec(Main.Projection.NearPlane, Main.Projection.FarPlane));
+    prog.SetUniform('lightCount', FLightRenderer.LightsCount*1.0);
+    prog.SetUniform('light_list', FLightRenderer.LightsList);
+    prog.SetUniform('light_headBufferSize', FLightRenderer.LightsHeadBuffer.Size*1.0);
+    prog.SetUniform('light_headBuffer', FLightRenderer.LightsHeadBuffer, Sampler_NoFilter);
+    prog.SetUniform('light_linkedList', FLightRenderer.LightsLinkedList);
+    prog.SetUniform('light_matrices', FLightRenderer.LightMatrices);
+    prog.SetUniform('ShadowCube512', FLightRenderer.Cubes512, cSampler_Cubes2);
+    prog.SetUniform('ShadowSpot512', FLightRenderer.Spots512, cSampler_Cubes2);
+    prog.SetUniform('ShadowCube1024', FLightRenderer.Cubes1024, cSampler_Cubes2);
+    prog.SetUniform('ShadowSpot1024', FLightRenderer.Spots1024, cSampler_Cubes2);
+    prog.SetUniform('ShadowCube2048', FLightRenderer.Cubes2048, cSampler_Cubes2);
+    prog.SetUniform('ShadowSpot2048', FLightRenderer.Spots2048, cSampler_Cubes2);
+  end;
+
 var prog: TavProgram;
     gobj: TbGraphicalObject;
 begin
@@ -736,21 +750,8 @@ begin
     prog := FModelsPBRProgram;
   //else
     //prog := FModelsProgram;
-  prog.Select();
-  prog.SetUniform('depthRange', Main.Projection.DepthRange);
-  prog.SetUniform('planesNearFar', Vec(Main.Projection.NearPlane, Main.Projection.FarPlane));
-  prog.SetUniform('lightCount', FLightRenderer.LightsCount*1.0);
-  prog.SetUniform('light_list', FLightRenderer.LightsList);
-  prog.SetUniform('light_headBufferSize', FLightRenderer.LightsHeadBuffer.Size*1.0);
-  prog.SetUniform('light_headBuffer', FLightRenderer.LightsHeadBuffer, Sampler_NoFilter);
-  prog.SetUniform('light_linkedList', FLightRenderer.LightsLinkedList);
-  prog.SetUniform('light_matrices', FLightRenderer.LightMatrices);
-  prog.SetUniform('ShadowCube512', FLightRenderer.Cubes512, cSampler_Cubes2);
-  prog.SetUniform('ShadowSpot512', FLightRenderer.Spots512, cSampler_Cubes2);
-  prog.SetUniform('ShadowCube1024', FLightRenderer.Cubes1024, cSampler_Cubes2);
-  prog.SetUniform('ShadowSpot1024', FLightRenderer.Spots1024, cSampler_Cubes2);
-  prog.SetUniform('ShadowCube2048', FLightRenderer.Cubes2048, cSampler_Cubes2);
-  prog.SetUniform('ShadowSpot2048', FLightRenderer.Spots2048, cSampler_Cubes2);
+  SelectModelsProgram(prog);
+
   if FEnviromentAsColor then
   begin
     prog.SetUniform('EnvAmbientColor', Vec(FEnviromentAmbient, 1.0));
@@ -777,12 +778,14 @@ begin
   if not FEnviromentAsColor then
   begin
     Main.States.DepthFunc := cfGreaterEqual;
+    Main.States.DepthWrite := False;
     FCubeDrawProgram.Select();
     FCubeDrawProgram.SetUniform('uDepthRange', Main.Projection.DepthRange.y);
     FCubeDrawProgram.SetUniform('Cube', FEnviromentCube.Radiance, Sampler_Linear);
     FCubeDrawProgram.SetUniform('uSampleLevel', 1.2);
     FCubeDrawProgram.Draw(ptTriangleStrip, cmNone, False, 0, 0, 4);
     Main.States.DepthFunc := cfGreater;
+    SelectModelsProgram(prog);
   end;
 
   //draw non depth objects
@@ -1182,6 +1185,8 @@ end;
 procedure TbWorld.AfterConstruction;
 begin
   inherited AfterConstruction;
+  FTree := TbGameObjTree.Create(Vec(1,1,1));
+
   FObjects    := TbGameObjSet.Create();
   FToDestroy  := TbGameObjSet.Create();
   FUpdateSubs := TbGameObjSet.Create();
