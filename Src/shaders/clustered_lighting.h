@@ -14,9 +14,16 @@ float3 light_headBufferSize;
 Texture3D<uint> light_headBuffer;
 StructuredBuffer<ListNode> light_linkedList;
 
+TextureCubeArray ShadowCube64; SamplerState ShadowCube64Sampler;
+TextureCubeArray ShadowCube128; SamplerState ShadowCube128Sampler;
+TextureCubeArray ShadowCube256; SamplerState ShadowCube256Sampler;
 TextureCubeArray ShadowCube512; SamplerState ShadowCube512Sampler;
 TextureCubeArray ShadowCube1024; SamplerState ShadowCube1024Sampler;
 TextureCubeArray ShadowCube2048; SamplerState ShadowCube2048Sampler;
+
+Texture2DArray ShadowSpot64; SamplerState ShadowSpot64Sampler;
+Texture2DArray ShadowSpot128; SamplerState ShadowSpot128Sampler;
+Texture2DArray ShadowSpot256; SamplerState ShadowSpot256Sampler;
 Texture2DArray ShadowSpot512; SamplerState ShadowSpot512Sampler;
 Texture2DArray ShadowSpot1024; SamplerState ShadowSpot1024Sampler;
 Texture2DArray ShadowSpot2048; SamplerState ShadowSpot2048Sampler;
@@ -30,6 +37,12 @@ Texture2D brdfLUT; SamplerState brdfLUTSampler;
 
 float SampleSadowCubeAuto(float3 Ray, Light l) {
     switch (l.ShadowSizeSliceRange.x) {
+        case 64:
+            return ShadowCube64.SampleLevel(ShadowCube64Sampler, float4(Ray, l.ShadowSizeSliceRange.y/6.0), 0).r;
+        case 128:
+            return ShadowCube128.SampleLevel(ShadowCube128Sampler, float4(Ray, l.ShadowSizeSliceRange.y/6.0), 0).r;
+        case 256:
+            return ShadowCube256.SampleLevel(ShadowCube256Sampler, float4(Ray, l.ShadowSizeSliceRange.y/6.0), 0).r;
         case 512:
             return ShadowCube512.SampleLevel(ShadowCube512Sampler, float4(Ray, l.ShadowSizeSliceRange.y/6.0), 0).r;
         case 1024:
@@ -43,6 +56,12 @@ float SampleSadowCubeAuto(float3 Ray, Light l) {
 
 float SampleShadowSpotAuto(float2 UV, Light l) {
     switch (l.ShadowSizeSliceRange.x) {
+        case 64:
+            return ShadowSpot64.SampleLevel(ShadowSpot64Sampler, float3(UV, l.ShadowSizeSliceRange.y), 0).r;
+        case 128:
+            return ShadowSpot128.SampleLevel(ShadowSpot128Sampler, float3(UV, l.ShadowSizeSliceRange.y), 0).r;
+        case 256:
+            return ShadowSpot256.SampleLevel(ShadowSpot256Sampler, float3(UV, l.ShadowSizeSliceRange.y), 0).r;        
         case 512:
             return ShadowSpot512.SampleLevel(ShadowSpot512Sampler, float3(UV, l.ShadowSizeSliceRange.y), 0).r;
         case 1024:
@@ -540,6 +559,7 @@ float4 Clustered_GGX(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 Nor
             atten *= _sampleSpotShadowPCF16(WorldPos, 0, light);
         } else {
             atten *= _sampleCubeShadowPCSS(WorldPos, 0, light);
+            //atten *= _sampleCubeShadowRude(WorldPos, 0.0, light);
         }
         
         Out.xyz += CookTorrance_GGX(Normal, l, v, h, F0, Albedo.xyz, roughness)*light.Color*atten;

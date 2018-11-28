@@ -807,6 +807,7 @@ procedure TbWorldRenderer.DrawWorld;
       Border     : (x: 0; y: 0; z: 0; w: 0);
       Comparison : cfNever;
     );
+  var st: TShadowsType;
   begin
     prog.Select();
     prog.SetUniform('depthRange', Main.Projection.DepthRange);
@@ -817,12 +818,12 @@ procedure TbWorldRenderer.DrawWorld;
     prog.SetUniform('light_headBuffer', FLightRenderer.LightsHeadBuffer, Sampler_NoFilter);
     prog.SetUniform('light_linkedList', FLightRenderer.LightsLinkedList);
     prog.SetUniform('light_matrices', FLightRenderer.LightMatrices);
-    prog.SetUniform('ShadowCube512', FLightRenderer.Cubes512, cSampler_Cubes2);
-    prog.SetUniform('ShadowSpot512', FLightRenderer.Spots512, cSampler_Cubes2);
-    prog.SetUniform('ShadowCube1024', FLightRenderer.Cubes1024, cSampler_Cubes2);
-    prog.SetUniform('ShadowSpot1024', FLightRenderer.Spots1024, cSampler_Cubes2);
-    prog.SetUniform('ShadowCube2048', FLightRenderer.Cubes2048, cSampler_Cubes2);
-    prog.SetUniform('ShadowSpot2048', FLightRenderer.Spots2048, cSampler_Cubes2);
+
+    for st := st64 to st2048 do
+    begin
+      prog.SetUniform('ShadowCube'+IntToStr(cShadowsTypeSize[st]), FLightRenderer.Cubes(st), cSampler_Cubes2);
+      prog.SetUniform('ShadowSpot'+IntToStr(cShadowsTypeSize[st]), FLightRenderer.Spots(st), cSampler_Cubes2);
+    end;
   end;
 
 var prog: TavProgram;
