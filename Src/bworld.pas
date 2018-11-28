@@ -49,6 +49,7 @@ type
     FTransformInv: TMat4;
   protected
     FTransformValid: Boolean;
+    procedure UpdateAtTree;
     procedure ValidateTransform; virtual;
     procedure InvalidateTransform; virtual;
     function  GetPos: TVec3; virtual;
@@ -88,6 +89,7 @@ type
 
     function Transform(): TMat4;
     function TransformInv(): TMat4;
+    function AbsBBox(): TAABB;
 
     function GetVisible(): Boolean; virtual;
 
@@ -102,6 +104,7 @@ type
 
   IbGameObjTree = {$IfDef FPC}specialize{$EndIf}ILooseOctTree<TbGameObject>;
   TbGameObjTree = {$IfDef FPC}specialize{$EndIf}TLooseOctTree<TbGameObject>;
+  IbGameObjTreeNode = {$IfDef FPC}specialize{$EndIf} IBase_LooseTreeNode<TbGameObject, TAABB>;
 
   { TbCollisionObject }
 
@@ -193,6 +196,10 @@ type
     private
       FOwner: TbWorldRenderer;
       FViewProjMat: TMat4Arr;
+
+      FQueryResult: IbGameObjArr;
+      FAllModels: IavModelInstanceArr;
+
       procedure ShadowPassGeometry(const ALight: TavLightSource; const ALightData: TLightData);
       procedure DrawTransparentGeometry();
     public
@@ -232,13 +239,11 @@ type
     procedure AfterRegister; override;
   protected
     FAllModels: IavModelInstanceArr;
-    FAllTransparent: IavModelInstanceArr;
-    FAllEmissives: IavModelInstanceArr;
-    FVisibleObjects: IbGameObjArr;
+    FQueryResult: IbGameObjArr;
 
     FOnAfterDraw: TNotifyEvent;
     procedure UpdateVisibleObjects;
-    procedure UpdateAllModels;
+    procedure UpdateAllModels(AModelType: TModelType);
   protected
     FGObjs: IbGraphicalObjectSet;
     procedure RegisterGraphicalObject(const gobj: TbGraphicalObject);
@@ -271,8 +276,24 @@ type
   { TbWorld }
 
   TbWorld = class (TavMainRenderChild)
+  private type
+    TTree_Iterator = class(TInterfacedObject, ILooseNodeCallBackIterator)
+    private type
+      TCheckType = (ctViewProj, ctAABB, ctLine);
+    private
+      FCheckType : TCheckType;
+      FViewProj  : TMat4;
+      FDepthRange: TVec2;
+      FAABB      : TAABB;
+      FResult    : IbGameObjArr;
+    public
+      procedure OnEnumNode(const ASender: IInterface; const ANode: IInterface; var EnumChilds: Boolean);
+      constructor Create(const AResult: IbGameObjArr; const AViewProj: TMat4; const ADepthRange: TVec2);
+      constructor Create(const AResult: IbGameObjArr; const ABox: TAABB);
+    end;
   private
     FTree: IbGameObjTree;
+    FTreeToAdd : IbGameObjSet;
 
     FObjects   : IbGameObjSet;
     FToDestroy : IbGameObjSet;
@@ -292,6 +313,8 @@ type
 
     function GetGameTime: Int64;
     procedure SetWorldState(const AValue: TbGameObject);
+  private
+    procedure Process_TreeToAdd;
   public
     property Renderer : TbWorldRenderer read FRenderer;
     //property Physics  : IPhysWorld read FPhysics;
@@ -338,6 +361,60 @@ type
   end;
 
 var gvCounter: Int64;
+
+{ TbWorld.TTree_Iterator }
+
+procedure TbWorld.TTree_Iterator.OnEnumNode(const ASender: IInterface; const ANode: IInterface; var EnumChilds: Boolean);
+var box: TAABB;
+    tree: IbGameObjTree absolute ASender;
+    node: IbGameObjTreeNode absolute ANode;
+    i: Integer;
+    addItem: Boolean;
+begin
+  box := tree.AABB(ANode);
+  case FCheckType of
+    ctViewProj:
+        EnumChilds := box.InFrustum(FViewProj, FDepthRange);
+    ctAABB:
+        EnumChilds := Intersect(box, FAABB);
+  else
+    EnumChilds := False;
+  end;
+
+  if EnumChilds then
+  begin
+    for i := 0 to node.ItemsCount - 1 do
+    begin
+      if not node.Item(i).GetVisible() then Continue;
+      box := node.Item(i).AbsBBox;
+
+      case FCheckType of
+        ctViewProj: addItem := box.InFrustum(FViewProj, FDepthRange);
+        ctAABB: addItem := Intersect(box, FAABB);
+      else
+        addItem := False;
+      end;
+
+      if addItem then
+        FResult.Add(node.Item(i));
+    end;
+  end;
+end;
+
+constructor TbWorld.TTree_Iterator.Create(const AResult: IbGameObjArr; const AViewProj: TMat4; const ADepthRange: TVec2);
+begin
+  FResult := AResult;
+  FViewProj := AViewProj;
+  FCheckType := ctViewProj;
+  FDepthRange := ADepthRange;
+end;
+
+constructor TbWorld.TTree_Iterator.Create(const AResult: IbGameObjArr; const ABox: TAABB);
+begin
+  FResult := AResult;
+  FAABB := ABox;
+  FCheckType := ctAABB;
+end;
 
 { TTexRemapper }
 
@@ -548,6 +625,7 @@ procedure TbWorldRenderer.TShadowPassAdapter.ShadowPassGeometry(const ALight: Ta
 var
   i: Integer;
   sm: PShadowMatrix;
+  omnibox: TAABB;
 begin
   sm := ALight.Matrices;
   for i := 0 to ALightData.ShadowSizeSliceRange.z - 1 do
@@ -556,12 +634,26 @@ begin
     Inc(sm);
   end;
 
+  if ALightData.ShadowSizeSliceRange.z = 6 then //cubemap
+  begin
+    omnibox.min := ALightData.PosRange.xyz - Vec(ALightData.PosRange.w, ALightData.PosRange.w, ALightData.PosRange.w);
+    omnibox.max := ALightData.PosRange.xyz + Vec(ALightData.PosRange.w, ALightData.PosRange.w, ALightData.PosRange.w);
+    FQueryResult := FOwner.World.QueryObjects(omnibox);
+  end
+  else
+  begin
+    FQueryResult := FOwner.World.QueryObjects(sm^.viewProj);
+  end;
+  FAllModels.Clear();
+  for i := 0 to FQueryResult.Count - 1 do
+    FQueryResult[i].WriteModels(FAllModels, mtDefault);
+
   FOwner.FModelsShadowProgram.Select;
   FOwner.FModelsShadowProgram.SetUniform('matCount', ALightData.ShadowSizeSliceRange.z);
   FOwner.FModelsShadowProgram.SetUniform('sliceOffset', Integer(round(ALightData.ShadowSizeSliceRange.y)));
   FOwner.FModelsShadowProgram.SetUniform('viewProj', @FViewProjMat[0], ALightData.ShadowSizeSliceRange.z);
   FOwner.FModels.Select;
-  FOwner.FModels.Draw(FOwner.FAllModels);
+  FOwner.FModels.Draw(FAllModels, False);
 end;
 
 procedure TbWorldRenderer.TShadowPassAdapter.DrawTransparentGeometry;
@@ -573,6 +665,9 @@ constructor TbWorldRenderer.TShadowPassAdapter.Create(AOwner: TbWorldRenderer);
 begin
   FOwner := AOwner;
   SetLength(FViewProjMat, 6);
+
+  FQueryResult := TbGameObjArr.Create();
+  FAllModels := TavModelInstanceArr.Create();
 end;
 
 { TbWorldRenderer }
@@ -621,35 +716,25 @@ begin
 
   FPrefabs := TavMeshInstances.Create();
 
-  FAllModels := TavModelInstanceArr.Create();
-  FAllTransparent := TavModelInstanceArr.Create();
-  FAllEmissives := TavModelInstanceArr.Create();
-  FVisibleObjects := TbGameObjArr.Create();
   FGObjs := TbGraphicalObjectSet.Create();
+
+  FAllModels := TavModelInstanceArr.Create();
 end;
 
 procedure TbWorldRenderer.UpdateVisibleObjects;
-var i: Integer;
+var vp: TMat4;
 begin
-  FVisibleObjects := World.QueryObjects(Main.Camera.Matrix * Main.Projection.Matrix);
-  for i := FVisibleObjects.Count - 1 downto 0 do
-    if not FVisibleObjects[i].GetVisible() then
-      FVisibleObjects.DeleteWithSwap(i);
+  vp := Main.Camera.Matrix * Main.Projection.Matrix;
+  FQueryResult := World.QueryObjects(vp);
 end;
 
-procedure TbWorldRenderer.UpdateAllModels;
+procedure TbWorldRenderer.UpdateAllModels(AModelType: TModelType);
 var
   i: Integer;
 begin
   FAllModels.Clear();
-  FAllTransparent.Clear();
-  FAllEmissives.Clear();
-  for i := 0 to FVisibleObjects.Count - 1 do
-  begin
-    FVisibleObjects[i].WriteModels(FAllModels, mtDefault);
-    FVisibleObjects[i].WriteModels(FAllTransparent, mtTransparent);
-    FVisibleObjects[i].WriteModels(FAllEmissives, mtEmissive);
-  end;
+  for i := 0 to FQueryResult.Count - 1 do
+    FQueryResult[i].WriteModels(FAllModels, AModelType);
 end;
 
 procedure TbWorldRenderer.RegisterGraphicalObject(const gobj: TbGraphicalObject);
@@ -681,7 +766,6 @@ end;
 procedure TbWorldRenderer.PrepareToDraw;
 begin
   UpdateVisibleObjects();
-  UpdateAllModels();
 
   Main.States.DepthTest := True;
 
@@ -765,6 +849,8 @@ begin
   end;
   FModels.Select();
 
+  UpdateAllModels(mtDefault);
+
   //depth prepass
   Main.States.ColorMask[AllTargets] := [];
   FModels.Draw(FAllModels);
@@ -788,15 +874,19 @@ begin
     SelectModelsProgram(prog);
   end;
 
+  UpdateAllModels(mtTransparent);
+
   //draw non depth objects
   Main.States.DepthWrite := False;
   //transparent first
-  FModels.Draw(FAllTransparent);
+  FModels.Draw(FAllModels);
   if Assigned(FOnAfterDraw) then
     FOnAfterDraw(Self);
 
   FGObjs.Reset;
   while FGObjs.Next(gobj) do gobj.Draw();
+
+  UpdateAllModels(mtEmissive);
 
   Main.States.DepthFunc := cfGreaterEqual;
   FEmissionFBO.FrameRect := FGBuffer.FrameRect;
@@ -804,7 +894,7 @@ begin
   FEmissionFBO.Clear(0, Vec(0,0,0,0));
   FModelsEmissionProgram.Select();
   FModels.Select;
-  FModels.Draw(FAllEmissives);
+  FModels.Draw(FAllModels);
   Main.States.DepthFunc := cfGreater;
 
   Main.States.DepthWrite := True;
@@ -905,12 +995,14 @@ begin
   if FPos = AValue then Exit;
   FPos := AValue;
   InvalidateTransform;
+  UpdateAtTree;
 end;
 
 procedure TbGameObject.SetBBox(const AValue: TAABB);
 begin
   if FBBox = AValue then Exit;
   FBBox := AValue;
+  UpdateAtTree;
 end;
 
 procedure TbGameObject.SetRot(const AValue: TQuat);
@@ -918,6 +1010,7 @@ begin
   if FRot = AValue then Exit;
   FRot := AValue;
   InvalidateTransform;
+  UpdateAtTree;
 end;
 
 procedure TbGameObject.SetScale(const AValue: Single);
@@ -925,6 +1018,15 @@ begin
   if FScale = AValue then Exit;
   FScale := AValue;
   InvalidateTransform;
+end;
+
+procedure TbGameObject.UpdateAtTree;
+begin
+  FWorld.FTree.Delete(Self);
+  if not FBBox.IsEmpty then
+    FWorld.FTreeToAdd.Add(Self)
+  else
+    FWorld.FTreeToAdd.Delete(Self);
 end;
 
 procedure TbGameObject.ValidateTransform;
@@ -1039,6 +1141,11 @@ begin
   Result := FTransformInv;
 end;
 
+function TbGameObject.AbsBBox(): TAABB;
+begin
+  Result := BBox * Transform();
+end;
+
 function TbGameObject.GetVisible(): Boolean;
 begin
   Result := True;
@@ -1070,19 +1177,23 @@ begin
   inherited AfterConstruction;
   FScale := 1;
   FRot.v4 := Vec(0,0,0,1);
-  FBBox := EmptyAABB;
 
   FWorld.FObjects.Add(Self);
 
   FModels := TavModelInstanceArr.Create;
   FEmissive := TavModelInstanceArr.Create;
   FTransparent := TavModelInstanceArr.Create;
+
+  UpdateAtTree;
 end;
 
 destructor TbGameObject.Destroy;
 begin
   if FWorld <> nil then
   begin
+    FWorld.FTree.Delete(Self);
+    FWorld.FTreeToAdd.Delete(Self);
+
     FWorld.FObjects.Delete(Self);
     FWorld.FToDestroy.Delete(Self);
     FWorld.FUpdateSubs.Delete(Self);
@@ -1101,27 +1212,39 @@ begin
   FWorldState := AValue;
 end;
 
+procedure TbWorld.Process_TreeToAdd;
+var obj: TbGameObject;
+begin
+  if FTreeToAdd.Count = 0 then Exit;
+  FTreeToAdd.Reset;
+  while FTreeToAdd.Next(obj) do
+    FTree.Add(obj, obj.AbsBBox());
+  FTreeToAdd.Clear;
+end;
+
 function TbWorld.GetGameTime: Int64;
 begin
   Result := FTimeTick * Main.UpdateStatesInterval;
 end;
 
 function TbWorld.QueryObjects(const AViewProj: TMat4): IbGameObjArr;
-var obj: TbGameObject;
+var it: ILooseNodeCallBackIterator;
 begin
+  Process_TreeToAdd;
+
   Result := TbGameObjArr.Create();
-  FObjects.Reset;
-  while FObjects.Next(obj) do
-    Result.Add(obj);
+  it := TTree_Iterator.Create(Result, AViewProj, Main.Projection.DepthRange);
+  FTree.EnumNodes(it);
 end;
 
 function TbWorld.QueryObjects(const ABox: TAABB): IbGameObjArr;
-var obj: TbGameObject;
+var it: ILooseNodeCallBackIterator;
 begin
+  Process_TreeToAdd;
+
   Result := TbGameObjArr.Create();
-  FObjects.Reset;
-  while FObjects.Next(obj) do
-    Result.Add(obj);
+  it := TTree_Iterator.Create(Result, ABox);
+  FTree.EnumNodes(it);
 end;
 
 function TbWorld.QueryObjects(const ARay: TLine): IbGameObjArr;
@@ -1136,7 +1259,7 @@ begin
   Result := FUIObjects;
 end;
 
-procedure TbWorld.UpdateStep;
+procedure TbWorld.UpdateStep();
 var
   obj: TbGameObject;
   gobjs_all: IbGraphicalObjectSet;
@@ -1186,6 +1309,7 @@ procedure TbWorld.AfterConstruction;
 begin
   inherited AfterConstruction;
   FTree := TbGameObjTree.Create(Vec(1,1,1));
+  FTreeToAdd := TbGameObjSet.Create();
 
   FObjects    := TbGameObjSet.Create();
   FToDestroy  := TbGameObjSet.Create();

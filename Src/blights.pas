@@ -91,6 +91,8 @@ type
     procedure InvalidateLight;
     procedure ValidateLight(const AMain: TavMainRender); virtual;
   public
+    function InFrustum(const AFrustum: TFrustum): Boolean; virtual;
+
     function ShadowSlice: IShadowSlice;
 
     property CastShadows: TShadowsType read FCastShadows write SetCastShadows;
@@ -195,6 +197,8 @@ type
     function AllocShadowSlices: IShadowSlice; override;
     procedure ValidateLight(const AMain: TavMainRender); override;
   public
+    function InFrustum(const AFrustum: TFrustum): Boolean; override;
+
     property Pos   : TVec3  read FPos    write SetPos;
     property Radius: Single read FRadius write SetRadius;
     property Size  : Single read FSize   write SetSize;
@@ -223,6 +227,8 @@ type
     function AllocShadowSlices: IShadowSlice; override;
     procedure ValidateLight(const AMain: TavMainRender); override;
   public
+    function InFrustum(const AFrustum: TFrustum): Boolean; override;
+
     property Pos: TVec3 read FPos write SetPos;
     property Dir: TVec3 read FDir write SetDir;
     property Radius: Single read FRadius write SetRadius;
@@ -394,6 +400,66 @@ type
   public
     constructor Create(const ALight: TavSpotLight);
   end;
+
+function LightIntersectFrusum(const ALightPos, ALightDir: TVec3; ALightRange, ALightCosHalfAngle: Single; const AFrustum: TFrustum): Boolean;
+
+  function GetSplitPlane(const APt: TVec3) : TPlane;
+
+    function PointLineProjection(const pt, ro, rd_n: TVec3) : TVec3;
+    begin
+        Result := ro + rd_n * dot(pt-ro, rd_n);
+    end;
+
+  var ptDir: TVec3;
+      ptDirLen: Single;
+      dot_ptDir_lDir: Single;
+      pp: TVec3;
+      a, b, b2, tn: Single;
+      p1, p2: TVec3;
+  begin
+      Result := Plane(0,0,0,0);
+      ptDir := APt - ALightPos;
+      ptDirLen := Len(ptDir);
+      dot_ptDir_lDir := Dot(ptDir, ALightDir);
+      if ( dot_ptDir_lDir >= ALightCosHalfAngle*ptDirLen ) then //point case
+      begin
+          Result.Norm := normalize(APt - ALightPos);
+          Result.D := -dot(Result.Norm, ALightPos + Result.Norm*ALightRange);
+      end
+      else //cone side case
+      begin
+          pp := PointLineProjection(APt, ALightPos, ALightDir);
+          a := Len(pp - ALightPos);
+          tn := sqrt( Clamp(1.0 - sqr(ALightCosHalfAngle), 0.0, 1.0) ) / ALightCosHalfAngle;
+          b := a * tn;
+          p1 := pp + normalize(APt - pp)*b;
+          b2 := b * tn;
+          p2 := pp + ALightDir * b2;
+          Result.Norm := normalize(p1 - p2);
+          Result.D := -dot(Result.Norm, ALightPos);
+      end;
+  end;
+
+var i, j: Integer;
+    pl: TPlane;
+begin
+  for i := 0 to 5 do
+      if (dot(AFrustum.planes[i].Norm, ALightPos) + AFrustum.planes[i].D > ALightRange) then
+        Exit(False);
+  for i := 0 to 7 do
+  begin
+    pl := GetSplitPlane(AFrustum.pts[i]);
+    j := 0;
+    while j < 8 do
+    begin
+      if (dot(AFrustum.pts[j], pl.Norm)+pl.D < 0) then
+        Break;
+      Inc(j);
+    end;
+    if j = 8 then Exit(False);
+  end;
+  Result := True;
+end;
 
 { TavSpotLightAdapter }
 
@@ -619,6 +685,11 @@ begin
     pld^.MatrixOffset := 0;
     pld^.ShadowSizeSliceRange := Vec(-1,-1,-1);
   end;
+end;
+
+function TavSpotLight.InFrustum(const AFrustum: TFrustum): Boolean;
+begin
+  Result := LightIntersectFrusum(Pos, Dir, Radius, cos(FAngles.y*0.5), AFrustum);
 end;
 
 procedure TavSpotLight.AfterConstruction;
@@ -1002,6 +1073,11 @@ begin
   end;
 end;
 
+function TavPointLight.InFrustum(const AFrustum: TFrustum): Boolean;
+begin
+  Result := LightIntersectFrusum(Pos, Vec(0,0,0), Radius, 0, AFrustum);
+end;
+
 procedure TavPointLight.AfterConstruction;
 begin
   inherited AfterConstruction;
@@ -1053,6 +1129,11 @@ end;
 procedure TavLightSource.ValidateLight(const AMain: TavMainRender);
 begin
 
+end;
+
+function TavLightSource.InFrustum(const AFrustum: TFrustum): Boolean;
+begin
+  Result := False;
 end;
 
 function TavLightSource.ShadowSlice: IShadowSlice;
@@ -1162,6 +1243,11 @@ var
   i: Integer;
   ld: TLightData;
   fbo: TavFrameBuffer;
+
+  pbox: TAABB;
+  f: TFrustum;
+
+  nn: Integer;
 begin
   BuildHeadBuffer;
 
@@ -1170,10 +1256,20 @@ begin
 //  fbo.Select();
 //  fbo.ClearDS(Main.Projection.DepthRange.y);
 
+  pbox.min := Vec(-1,-1,Main.Projection.DepthRange.x);
+  pbox.max := Vec( 1, 1,Main.Projection.DepthRange.y);
+  f.Init(Inv(Main.Camera.Matrix * Main.Projection.Matrix), pbox);
+
+  nn := 0;
   for i := 0 to FLights.Count - 1 do
   begin
+    if not FLights[i].InFrustum(f) then
+      Continue;
+
+    Inc(nn);
+
     ld := FLightsData[i];
-    if ld.ShadowSizeSliceRange.y >= 0 then
+    if (ld.ShadowSizeSliceRange.y >= 0) then
     begin
       if LenSqr(ld.Dir) = 0 then
       begin
