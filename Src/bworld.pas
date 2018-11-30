@@ -51,6 +51,7 @@ type
     FTransformValid: Boolean;
     procedure UpdateAtTree;
     procedure ValidateTransform; virtual;
+    procedure AfterValidateTransform; virtual;
     procedure InvalidateTransform; virtual;
     function  GetPos: TVec3; virtual;
     function  GetRot: TQuat; virtual;
@@ -59,6 +60,11 @@ type
     procedure SetRot(const AValue: TQuat); virtual;
     procedure SetScale(const AValue: Single); virtual;
   protected
+    FStatic: Boolean;
+    function  GetStatic: Boolean; virtual;
+    procedure SetStatic(const AValue: Boolean); virtual;
+  protected
+    FSubscribed: Boolean;
     procedure SubscribeForUpdateStep;
     procedure UnSubscribeFromUpdateStep;
     procedure UpdateStep; virtual;
@@ -90,6 +96,8 @@ type
     function Transform(): TMat4;
     function TransformInv(): TMat4;
     function AbsBBox(): TAABB;
+
+    property Static: Boolean read GetStatic write SetStatic;
 
     function GetVisible(): Boolean; virtual;
 
@@ -200,6 +208,7 @@ type
       FQueryResult: IbGameObjArr;
       FAllModels: IavModelInstanceArr;
 
+      procedure PreapreObjects(const ALight: TavLightSource; out AHasDynamic: Boolean);
       procedure ShadowPassGeometry(const ALight: TavLightSource; const ALightData: TLightData);
       procedure DrawTransparentGeometry();
     public
@@ -212,7 +221,16 @@ type
 
     FParticles: TbParticleSystem;
 
-    FGBuffer: TavFrameBuffer;
+    FST_Albedo  : TavTexture;
+    FST_Normals : TavTexture;
+    FST_Material: TavTexture;
+    FST_Depth   : TavTexture;
+    FST_Emission: TavTexture;
+    FST_Lighted : TavTexture;
+
+    FGBufferForOpacity: TavFrameBuffer;
+    FGBufferForLightPass: TavFrameBuffer;
+    FGBufferForTransparent: TavFrameBuffer;
     FEmissionFBO: TavFrameBuffer;
 
     FCubeUtils: TbCubeUtils;
@@ -224,6 +242,8 @@ type
 
     FModelsProgram: TavProgram;
     FModelsProgram_NoLight: TavProgram;
+    FModelsPBRProgramToGBuffer: TavProgram;
+    FModelsPBRProgramLightPass: TavProgram;
     FModelsPBRProgram: TavProgram;
     FModelsShadowProgram: TavProgram;
     FModelsEmissionProgram: TavProgram;
@@ -301,6 +321,8 @@ type
     FTempObjs  : IbGameObjArr;
     FGObjsToDestroy: IbGraphicalObjectArr;
 
+    FStaticForUpdate: IbGameObjSet;
+
     FUIObjects : IbGameObjSet;
     FWorldState: TbGameObject;
 
@@ -328,7 +350,7 @@ type
 
     property GameTime: Int64 read GetGameTime;
 
-    procedure UpdateStep();
+    procedure UpdateStep(AStepCount: Integer = 1);
     procedure SafeDestroy(const AObj: TbGameObject);
     procedure ProcessToDestroy;
 
@@ -621,42 +643,52 @@ end;
 *)
 { TbWorldRenderer.TShadowPassAdapter }
 
+procedure TbWorldRenderer.TShadowPassAdapter.PreapreObjects(const ALight: TavLightSource; out AHasDynamic: Boolean);
+var
+  i: Integer;
+begin
+  if ALight.MatricesCount = 6 then //omnilight
+    FQueryResult := FOwner.World.QueryObjects(ALight.BBox)
+  else                                          //spotlight
+    FQueryResult := FOwner.World.QueryObjects(ALight.Matrices^.viewProj);
+
+  AHasDynamic := False;
+  for i := 0 to FQueryResult.Count - 1 do
+    if not FQueryResult[i].Static then
+    begin
+      AHasDynamic := True;
+      Break;
+    end;
+end;
+
 procedure TbWorldRenderer.TShadowPassAdapter.ShadowPassGeometry(const ALight: TavLightSource; const ALightData: TLightData);
 var
   i: Integer;
   sm: PShadowMatrix;
-  omnibox: TAABB;
 begin
+  if FQueryResult = nil then Exit;
+  if FQueryResult.Count = 0 then Exit;
+
   sm := ALight.Matrices;
-  for i := 0 to ALightData.ShadowSizeSliceRange.z - 1 do
+  for i := 0 to ALightData.ShadowSizeSliceRangeMode.z - 1 do
   begin
     FViewProjMat[i] := sm^.viewProj;
     Inc(sm);
   end;
 
-  if ALightData.ShadowSizeSliceRange.z = 6 then //cubemap
-  begin
-    omnibox.min := ALightData.PosRange.xyz - Vec(ALightData.PosRange.w, ALightData.PosRange.w, ALightData.PosRange.w);
-    omnibox.max := ALightData.PosRange.xyz + Vec(ALightData.PosRange.w, ALightData.PosRange.w, ALightData.PosRange.w);
-    FQueryResult := FOwner.World.QueryObjects(omnibox);
-  end
-  else
-  begin
-    FQueryResult := FOwner.World.QueryObjects(sm^.viewProj);
-  end;
   FAllModels.Clear();
   for i := 0 to FQueryResult.Count - 1 do
     FQueryResult[i].WriteModels(FAllModels, mtDefault);
 
   FOwner.FModelsShadowProgram.Select;
-  FOwner.FModelsShadowProgram.SetUniform('matCount', ALightData.ShadowSizeSliceRange.z);
-  FOwner.FModelsShadowProgram.SetUniform('sliceOffset', Integer(round(ALightData.ShadowSizeSliceRange.y)));
-  FOwner.FModelsShadowProgram.SetUniform('viewProj', @FViewProjMat[0], ALightData.ShadowSizeSliceRange.z);
+  FOwner.FModelsShadowProgram.SetUniform('matCount', ALightData.ShadowSizeSliceRangeMode.z);
+  FOwner.FModelsShadowProgram.SetUniform('sliceOffset', Integer(round(ALightData.ShadowSizeSliceRangeMode.y)));
+  FOwner.FModelsShadowProgram.SetUniform('viewProj', @FViewProjMat[0], ALightData.ShadowSizeSliceRangeMode.z);
   FOwner.FModels.Select;
   FOwner.FModels.Draw(FAllModels, False);
 end;
 
-procedure TbWorldRenderer.TShadowPassAdapter.DrawTransparentGeometry;
+procedure TbWorldRenderer.TShadowPassAdapter.DrawTransparentGeometry();
 begin
 
 end;
@@ -681,24 +713,58 @@ begin
 end;
 
 procedure TbWorldRenderer.AfterRegister;
+  procedure CreateScreenTextures();
+  begin
+    FST_Albedo := TavTexture.Create(Self);
+    FST_Albedo.TargetFormat := TTextureFormat.RGBA;
+    FST_Albedo.AutoGenerateMips := False;
+
+    FST_Normals := TavTexture.Create(Self);
+    FST_Normals.TargetFormat := TTextureFormat.RGBA;
+    FST_Normals.AutoGenerateMips := False;
+
+    FST_Material := TavTexture.Create(Self);
+    FST_Material.TargetFormat := TTextureFormat.RGBA;
+    FST_Material.AutoGenerateMips := False;
+
+    FST_Depth := TavTexture.Create(Self);
+    FST_Depth.TargetFormat := TTextureFormat.D32f;
+    FST_Depth.AutoGenerateMips := False;
+
+    FST_Lighted := TavTexture.Create(Self);
+    FST_Lighted.TargetFormat := TTextureFormat.RGBA16f;
+    FST_Lighted.AutoGenerateMips := False;
+
+    FST_Emission := TavTexture.Create(Self);
+    FST_Emission.TargetFormat := TTextureFormat.RGBA16f;
+    FST_Emission.AutoGenerateMips := True;
+  end;
+
 begin
   inherited AfterRegister;
+  CreateScreenTextures();
+
   FLightRenderer := TavLightRenderer.Create(Self);
   FShadowPassAdapter := TShadowPassAdapter.Create(Self);
   FParticles := TbParticleSystem.Create(Self);
 
   FPostProcess := TavPostProcess.Create(Self);
 
-  //FGBuffer := Create_FrameBuffer(Self, [TTextureFormat.RGBA16f, TTextureFormat.RGBA, TTextureFormat.D32f], [false, false, false]);
-  FGBuffer := Create_FrameBuffer(Self, [TTextureFormat.RGBA16f, TTextureFormat.D32f], [false, false]);
-  FEmissionFBO := Create_FrameBuffer(FGBuffer, [TTextureFormat.RGBA16f], [false]);
-  (FEmissionFBO.GetColor(0) as TavTexture).AutoGenerateMips := True;
-  FEmissionFBO.SetDepth(FGBuffer.GetDepth, 0);
+  FGBufferForOpacity := Create_FrameBuffer(Self, [FST_Albedo, FST_Normals, FST_Material, FST_Depth]);
+  FGBufferForLightPass := Create_FrameBuffer(Self, [FST_Lighted]);
+  FGBufferForTransparent := Create_FrameBuffer(Self, [FST_Lighted, FST_Depth]);
+  FEmissionFBO := Create_FrameBuffer(Self, [FST_Emission, FST_Depth]);
 
   FModelsProgram := TavProgram.Create(Self);
   FModelsProgram.Load('avMesh', SHADERS_FROMRES, SHADERS_DIR);
   FModelsProgram_NoLight := TavProgram.Create(Self);
   FModelsProgram_NoLight.Load('avMesh_NoLight', SHADERS_FROMRES, SHADERS_DIR);
+
+  FModelsPBRProgramToGBuffer := TavProgram.Create(Self);
+  FModelsPBRProgramToGBuffer.Load('avMeshPbrPackedToGBuffer', SHADERS_FROMRES, SHADERS_DIR);
+  FModelsPBRProgramLightPass := TavProgram.Create(Self);
+  FModelsPBRProgramLightPass.Load('avMeshPbrGLightPass', SHADERS_FROMRES, SHADERS_DIR);
+
   FModelsPBRProgram := TavProgram.Create(Self);
   //FModelsPBRProgram.Load('avMeshPBR', SHADERS_FROMRES, SHADERS_DIR);
   //FModelsPBRProgram.Load('avMeshTest', SHADERS_FROMRES, SHADERS_DIR);
@@ -787,14 +853,11 @@ begin
       FCubeUtils.GenLUTbrdf(FbrdfLUT, 512);
     end;
   end;
-
-  FGBuffer.FrameRect := RectI(Vec(0,0),Main.WindowSize);
-  FGBuffer.Select;
 end;
 
 procedure TbWorldRenderer.DrawWorld;
 
-  procedure SelectModelsProgram(const prog: TavProgram);
+  procedure SelectProgramForLighting(const prog: TavProgram);
   const
     cSampler_Cubes2 : TSamplerInfo = (
       MinFilter  : tfNearest;
@@ -824,99 +887,96 @@ procedure TbWorldRenderer.DrawWorld;
       prog.SetUniform('ShadowCube'+IntToStr(cShadowsTypeSize[st]), FLightRenderer.Cubes(st), cSampler_Cubes2);
       prog.SetUniform('ShadowSpot'+IntToStr(cShadowsTypeSize[st]), FLightRenderer.Spots(st), cSampler_Cubes2);
     end;
+
+    if FEnviromentAsColor then
+    begin
+      prog.SetUniform('EnvAmbientColor', Vec(FEnviromentAmbient, 1.0));
+    end
+    else
+    begin
+      prog.SetUniform('EnvAmbientColor', Vec(0.0,0.0,0.0,0.0));
+      prog.SetUniform('EnvRadiance', FEnviromentCube.Radiance, Sampler_Linear);
+      prog.SetUniform('EnvIrradiance', FEnviromentCube.Irradiance, Sampler_Linear);
+      prog.SetUniform('brdfLUT', FbrdfLUT, Sampler_Linear);
+    end;
   end;
 
-var prog: TavProgram;
-    gobj: TbGraphicalObject;
+var gobj: TbGraphicalObject;
 begin
   Main.States.CullMode := cmBack;
 
-  //if True then
-    prog := FModelsPBRProgram;
-  //else
-    //prog := FModelsProgram;
-  SelectModelsProgram(prog);
-
-  if FEnviromentAsColor then
-  begin
-    prog.SetUniform('EnvAmbientColor', Vec(FEnviromentAmbient, 1.0));
-  end
-  else
-  begin
-    prog.SetUniform('EnvAmbientColor', Vec(0.0,0.0,0.0,0.0));
-    prog.SetUniform('EnvRadiance', FEnviromentCube.Radiance, Sampler_Linear);
-    prog.SetUniform('EnvIrradiance', FEnviromentCube.Irradiance, Sampler_Linear);
-    prog.SetUniform('brdfLUT', FbrdfLUT, Sampler_Linear);
-  end;
-  FModels.Select();
-
+ //opacity pass
   UpdateAllModels(mtDefault);
-
-  //depth prepass
-  Main.States.ColorMask[AllTargets] := [];
+  FGBufferForOpacity.FrameRect := RectI(Vec(0,0),Main.WindowSize);
+  FGBufferForOpacity.Select;
+  FGBufferForOpacity.ClearDS(Main.Projection.DepthRange.y);
+  FModelsPBRProgramToGBuffer.Select();
+  FModels.Select();
   FModels.Draw(FAllModels);
 
-  //color pass
-  Main.States.ColorMask[AllTargets] := AllChanells;
-  Main.States.DepthFunc := cfEqual;
-  FModels.Draw(FAllModels);
-  Main.States.DepthFunc := cfGreater;
+ //light pass
+  FGBufferForLightPass.FrameRect := RectI(Vec(0,0),Main.WindowSize);
+  FGBufferForLightPass.Select;
+  SelectProgramForLighting(FModelsPBRProgramLightPass);
+  FModelsPBRProgramLightPass.SetUniform('Albedo', FST_Albedo, Sampler_NoFilter);
+  FModelsPBRProgramLightPass.SetUniform('Norm', FST_Normals, Sampler_NoFilter);
+  FModelsPBRProgramLightPass.SetUniform('Rg_AO_Mtl', FST_Material, Sampler_NoFilter);
+  FModelsPBRProgramLightPass.SetUniform('Depth', FST_Depth, Sampler_NoFilter);
+  FModelsPBRProgramLightPass.Draw(ptTriangleStrip, cmNone, False, 0, 0, 4);
 
+ //draw non depth objects
+  Main.States.DepthWrite := False;
+  FGBufferForTransparent.FrameRect := RectI(Vec(0,0),Main.WindowSize);
+  FGBufferForTransparent.Select();
+
+ //draw cubemap if needed
   if not FEnviromentAsColor then
   begin
     Main.States.DepthFunc := cfGreaterEqual;
-    Main.States.DepthWrite := False;
     FCubeDrawProgram.Select();
     FCubeDrawProgram.SetUniform('uDepthRange', Main.Projection.DepthRange.y);
     FCubeDrawProgram.SetUniform('Cube', FEnviromentCube.Radiance, Sampler_Linear);
     FCubeDrawProgram.SetUniform('uSampleLevel', 1.2);
     FCubeDrawProgram.Draw(ptTriangleStrip, cmNone, False, 0, 0, 4);
     Main.States.DepthFunc := cfGreater;
-    SelectModelsProgram(prog);
   end;
 
+ //transparency pass
   UpdateAllModels(mtTransparent);
+  if FAllModels.Count > 0 then
+  begin
+    SelectProgramForLighting(FModelsPBRProgram);
+    FModels.Select;
+    FModels.Draw(FAllModels);
+  end;
 
-  //draw non depth objects
-  Main.States.DepthWrite := False;
-  //transparent first
-  FModels.Draw(FAllModels);
+ //callback
   if Assigned(FOnAfterDraw) then
     FOnAfterDraw(Self);
 
+ //graphical objects
   FGObjs.Reset;
   while FGObjs.Next(gobj) do gobj.Draw();
 
+ //emission objects
   UpdateAllModels(mtEmissive);
 
   Main.States.DepthFunc := cfGreaterEqual;
-  FEmissionFBO.FrameRect := FGBuffer.FrameRect;
+  FEmissionFBO.FrameRect := RectI(Vec(0,0),Main.WindowSize);
   FEmissionFBO.Select();
   FEmissionFBO.Clear(0, Vec(0,0,0,0));
-  FModelsEmissionProgram.Select();
-  FModels.Select;
-  FModels.Draw(FAllModels);
+  if FAllModels.Count > 0 then
+  begin
+    FModelsEmissionProgram.Select();
+    FModels.Select;
+    FModels.Draw(FAllModels);
+  end;
   Main.States.DepthFunc := cfGreater;
 
   Main.States.DepthWrite := True;
 
-  if Main.ActiveApi = apiDX11_WARP then
-    FGBuffer.BlitToWindow();
-
-  FPostProcess.DoComposeOnly(FGBuffer, FEmissionFBO);
+  FPostProcess.DoComposeOnly(FGBufferForLightPass, FEmissionFBO);
   FPostProcess.ResultFBO.BlitToWindow();
-  {
-  if Main.ActiveApi = apiDX11_WARP then //early exit for WARP devices
-  begin
-    FGBuffer.BlitToWindow();
-    Main.States.DepthWrite := True;
-    Exit;
-  end;
-
-  FPostProcess.DoPostProcess(FGBuffer);
-
-  FPostProcess.ResultFBO.BlitToWindow();
-  }
 end;
 
 function TbWorldRenderer.CreatePointLight(): IavPointLight;
@@ -1021,6 +1081,17 @@ begin
   InvalidateTransform;
 end;
 
+procedure TbGameObject.SetStatic(const AValue: Boolean);
+begin
+  if FStatic = AValue then Exit;
+  FStatic := AValue;
+end;
+
+function TbGameObject.GetStatic: Boolean;
+begin
+  Result := FStatic or (not FSubscribed);
+end;
+
 procedure TbGameObject.UpdateAtTree;
 begin
   FWorld.FTree.Delete(Self);
@@ -1039,18 +1110,25 @@ begin
   FTransformInv := Inv(FTransform);
 
   for i := 0 to FModels.Count - 1 do
-    if FModels[i].Mesh <> nil then
-      FModels[i].Mesh.Transform := FTransform;
+    FModels[i].Transform := FTransform;
   for i := 0 to FEmissive.Count - 1 do
-    if FEmissive[i].Mesh <> nil then
-      FEmissive[i].Mesh.Transform := FTransform;
+    FEmissive[i].Transform := FTransform;
   for i := 0 to FTransparent.Count - 1 do
-    if FTransparent[i].Mesh <> nil then
-      FTransparent[i].Mesh.Transform := FTransform;
+    FTransparent[i].Transform := FTransform;
+
+  FWorld.FRenderer.FLightRenderer.InvalidateShadowsAt(AbsBBox());
+
+  AfterValidateTransform;
+end;
+
+procedure TbGameObject.AfterValidateTransform;
+begin
+
 end;
 
 procedure TbGameObject.InvalidateTransform;
 begin
+  FWorld.FRenderer.FLightRenderer.InvalidateShadowsAt(AbsBBox());
   FTransformValid := False;
 end;
 
@@ -1067,11 +1145,13 @@ end;
 procedure TbGameObject.SubscribeForUpdateStep;
 begin
   FWorld.FUpdateSubs.Add(Self);
+  FSubscribed := True;
 end;
 
 procedure TbGameObject.UnSubscribeFromUpdateStep;
 begin
   FWorld.FUpdateSubs.Delete(Self);
+  FSubscribed := False;
 end;
 
 procedure TbGameObject.UpdateStep;
@@ -1156,7 +1236,7 @@ procedure TbGameObject.AddModel(const AName: string; AType: TModelType);
 var inst: IavModelInstanceArr;
 begin
   inst := World.Renderer.CreateModelInstances([AName]);
-  inst[0].Mesh.Transform := Transform();
+  inst[0].Transform := Transform();
   case AType of
     mtDefault:
       begin
@@ -1260,14 +1340,14 @@ begin
   Result := FUIObjects;
 end;
 
-procedure TbWorld.UpdateStep();
+procedure TbWorld.UpdateStep(AStepCount: Integer = 1);
 var
   obj: TbGameObject;
   gobjs_all: IbGraphicalObjectSet;
   gobj: TbGraphicalObject;
   i: Integer;
 begin
-  Inc(FTimeTick);
+  Inc(FTimeTick, AStepCount);
   ProcessToDestroy;
 
   gobjs_all := FRenderer.GraphicalObjects;
@@ -1281,10 +1361,13 @@ begin
     FGObjsToDestroy[i].Free;
   FGObjsToDestroy.Clear();
 
+  FTempObjs.Clear;
   FUpdateSubs.Reset;
   while FUpdateSubs.Next(obj) do
-    obj.UpdateStep;
-  FColliders.UpdateStep(Main.UpdateStatesInterval);
+    FTempObjs.Add(obj);
+  for i := 0 to FTempObjs.Count - 1 do
+    FTempObjs[i].UpdateStep;
+  FColliders.UpdateStep(Main.UpdateStatesInterval * AStepCount);
   //FPhysics.UpdateStep(Main.UpdateStatesInterval);
 end;
 
@@ -1318,6 +1401,8 @@ begin
   FTempObjs   := TbGameObjArr.Create();
   FUIObjects  := TbGameObjSet.Create();
   FGObjsToDestroy := TbGraphicalObjectArr.Create();
+
+  FStaticForUpdate := TbGameObjSet.Create();
 
   FRenderer := TbWorldRenderer.Create(Self);
   //FPhysics := Create_IPhysWorld();

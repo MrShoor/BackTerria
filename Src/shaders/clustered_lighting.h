@@ -2,6 +2,7 @@
 #define	CLUSTERED_LIGHTING_H
 
 #include "matrices.h"
+#include "avModelMaterials.h"
 #include "lighting_types.h"
 #include "disc.h"
 #pragma pack_matrix( row_major )
@@ -36,38 +37,38 @@ Texture2D brdfLUT; SamplerState brdfLUTSampler;
 //input
 
 float SampleSadowCubeAuto(float3 Ray, Light l) {
-    switch (l.ShadowSizeSliceRange.x) {
+    switch (l.ShadowSizeSliceRangeMode.x) {
         case 64:
-            return ShadowCube64.SampleLevel(ShadowCube64Sampler, float4(Ray, l.ShadowSizeSliceRange.y/6.0), 0).r;
+            return ShadowCube64.SampleLevel(ShadowCube64Sampler, float4(Ray, l.ShadowSizeSliceRangeMode.y/6.0), 0).r;
         case 128:
-            return ShadowCube128.SampleLevel(ShadowCube128Sampler, float4(Ray, l.ShadowSizeSliceRange.y/6.0), 0).r;
+            return ShadowCube128.SampleLevel(ShadowCube128Sampler, float4(Ray, l.ShadowSizeSliceRangeMode.y/6.0), 0).r;
         case 256:
-            return ShadowCube256.SampleLevel(ShadowCube256Sampler, float4(Ray, l.ShadowSizeSliceRange.y/6.0), 0).r;
+            return ShadowCube256.SampleLevel(ShadowCube256Sampler, float4(Ray, l.ShadowSizeSliceRangeMode.y/6.0), 0).r;
         case 512:
-            return ShadowCube512.SampleLevel(ShadowCube512Sampler, float4(Ray, l.ShadowSizeSliceRange.y/6.0), 0).r;
+            return ShadowCube512.SampleLevel(ShadowCube512Sampler, float4(Ray, l.ShadowSizeSliceRangeMode.y/6.0), 0).r;
         case 1024:
-            return ShadowCube1024.SampleLevel(ShadowCube1024Sampler, float4(Ray, l.ShadowSizeSliceRange.y/6.0), 0).r;
+            return ShadowCube1024.SampleLevel(ShadowCube1024Sampler, float4(Ray, l.ShadowSizeSliceRangeMode.y/6.0), 0).r;
         case 2048:
-            return ShadowCube2048.SampleLevel(ShadowCube2048Sampler, float4(Ray, l.ShadowSizeSliceRange.y/6.0), 0).r;
+            return ShadowCube2048.SampleLevel(ShadowCube2048Sampler, float4(Ray, l.ShadowSizeSliceRangeMode.y/6.0), 0).r;
         default:
             return 0;
     }
 }
 
 float SampleShadowSpotAuto(float2 UV, Light l) {
-    switch (l.ShadowSizeSliceRange.x) {
+    switch (l.ShadowSizeSliceRangeMode.x) {
         case 64:
-            return ShadowSpot64.SampleLevel(ShadowSpot64Sampler, float3(UV, l.ShadowSizeSliceRange.y), 0).r;
+            return ShadowSpot64.SampleLevel(ShadowSpot64Sampler, float3(UV, l.ShadowSizeSliceRangeMode.y), 0).r;
         case 128:
-            return ShadowSpot128.SampleLevel(ShadowSpot128Sampler, float3(UV, l.ShadowSizeSliceRange.y), 0).r;
+            return ShadowSpot128.SampleLevel(ShadowSpot128Sampler, float3(UV, l.ShadowSizeSliceRangeMode.y), 0).r;
         case 256:
-            return ShadowSpot256.SampleLevel(ShadowSpot256Sampler, float3(UV, l.ShadowSizeSliceRange.y), 0).r;        
+            return ShadowSpot256.SampleLevel(ShadowSpot256Sampler, float3(UV, l.ShadowSizeSliceRangeMode.y), 0).r;        
         case 512:
-            return ShadowSpot512.SampleLevel(ShadowSpot512Sampler, float3(UV, l.ShadowSizeSliceRange.y), 0).r;
+            return ShadowSpot512.SampleLevel(ShadowSpot512Sampler, float3(UV, l.ShadowSizeSliceRangeMode.y), 0).r;
         case 1024:
-            return ShadowSpot1024.SampleLevel(ShadowSpot1024Sampler, float3(UV, l.ShadowSizeSliceRange.y), 0).r;
+            return ShadowSpot1024.SampleLevel(ShadowSpot1024Sampler, float3(UV, l.ShadowSizeSliceRangeMode.y), 0).r;
         case 2048:
-            return ShadowSpot2048.SampleLevel(ShadowSpot2048Sampler, float3(UV, l.ShadowSizeSliceRange.y), 0).r;
+            return ShadowSpot2048.SampleLevel(ShadowSpot2048Sampler, float3(UV, l.ShadowSizeSliceRangeMode.y), 0).r;
         default:
             return 0;
     }
@@ -121,18 +122,18 @@ float _testDepth(float PixelDepth, float ShadowMapDepth, float Slope) {
 
 float _sampleCubeShadowRude(float3 Pt, float Slope, Light light)
 {
-    if (light.ShadowSizeSliceRange.y < 0) return 1.0;
+    if (light.ShadowSizeSliceRangeMode.y < 0) return 1.0;
     float3 cubeDir = Pt - light.PosRange.xyz;
     float4x4 m = getCubeMatrix(cubeDir, light.MatrixOffset);
     float4 projPt = mul(float4(Pt,1.0), m);
     projPt.z /= projPt.w;
-    float depth = SampleSadowCubeAuto(cubeDir, light);//ShadowCube512.SampleLevel(ShadowCube512Sampler, float4(cubeDir,light.ShadowSizeSliceRange.y/6.0), 0.0).r;
+    float depth = SampleSadowCubeAuto(cubeDir, light);//ShadowCube512.SampleLevel(ShadowCube512Sampler, float4(cubeDir,light.ShadowSizeSliceRangeMode.y/6.0), 0.0).r;
     return _testDepth(projPt.z, depth, Slope);
 }
 
 float _sampleSpotShadowRude(float3 Pt, float Slope, Light light)
 {
-    if (light.ShadowSizeSliceRange.y < 0) return 1.0;
+    if (light.ShadowSizeSliceRangeMode.y < 0) return 1.0;
     float4x4 m = getSpotMatrix(light.MatrixOffset);
     float4 projPt = mul(float4(Pt,1.0), m);
     projPt.xyz /= projPt.w;
@@ -178,7 +179,7 @@ float POM_SelfShadow(float3x3 tbn, float3 vMacroNorm, float3 vLightDir, float2 v
 }
 
 float _sampleSpotShadowPCF16(float3 Pt, float Slope, Light light) {
-        if (light.ShadowSizeSliceRange.y < 0) return 1.0;
+        if (light.ShadowSizeSliceRangeMode.y < 0) return 1.0;
         float3 L = Pt - light.PosRange.xyz;
         float Llen = length(L);
         
@@ -213,7 +214,7 @@ float _sampleSpotShadowPCF16(float3 Pt, float Slope, Light light) {
 }
 
 float _sampleCubeShadowPCF16(float3 Pt, float Slope, Light light) {
-        if (light.ShadowSizeSliceRange.y < 0) return 1.0;
+        if (light.ShadowSizeSliceRangeMode.y < 0) return 1.0;
         float3 L = Pt - light.PosRange.xyz;
         float3 Llen = length(L);
         
@@ -244,7 +245,7 @@ float _sampleCubeShadowPCF16(float3 Pt, float Slope, Light light) {
 }
 
 float _sampleSpotShadowPCSS(float3 WorldPt, float Slope, Light light) {
-        if (light.ShadowSizeSliceRange.y < 0) return 1.0;
+        if (light.ShadowSizeSliceRangeMode.y < 0) return 1.0;
         float3 L = WorldPt - light.PosRange.xyz;
         float Llen = length(L);
         
@@ -312,7 +313,7 @@ float _sampleSpotShadowPCSS(float3 WorldPt, float Slope, Light light) {
 }
 
 float _sampleCubeShadowPCSS(float3 Pt, float Slope, Light light) {
-        if (light.ShadowSizeSliceRange.y < 0) return 1.0;
+        if (light.ShadowSizeSliceRangeMode.y < 0) return 1.0;
         float3 L = Pt - light.PosRange.xyz;
         float3 Llen = length(L);
         
@@ -466,7 +467,7 @@ float4 Clustered_Phong_POMSS(float3 ProjPos,
         if (dot(Normal, LightDir) > 0) 
             atten *= POM_SelfShadow(tbn, vMacroNorm, LightDir, vTexCoordCurrent, vTexCoordOrig, vTexH, m);
         
-        //if (l.ShadowSizeSliceRange.y == 6) {
+        //if (l.ShadowSizeSliceRangeMode.y == 6) {
             //atten *= _sampleCubeShadowPCF16(WorldPos, S l);
         
         Out.xyz += PhongColor(Normal, ViewDir, LightDir, l.Color, Diffuse, Specular, SpecPower)*atten;        
@@ -556,9 +557,21 @@ float4 Clustered_GGX(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 Nor
         float atten = saturate(1.0 - ((dist * dist) / (light.PosRange.w * light.PosRange.w))); //distance attenuation
         if (light.Angles.y) {
             atten *= cs_angle_over==0 ? 0 : saturate(cs_angle_over / (light.Angles.x - light.Angles.y)); //angle attenuation
-            atten *= _sampleSpotShadowPCF16(WorldPos, 0, light);
+            switch (light.ShadowSizeSliceRangeMode.w) {
+                case 1: atten *= _sampleSpotShadowPCSS(WorldPos, 0, light); break;
+                case 2: atten *= _sampleSpotShadowPCF16(WorldPos, 0, light); break;
+            default:
+                atten *= _sampleSpotShadowRude(WorldPos, 0, light); break;
+            }
         } else {
-            atten *= _sampleCubeShadowPCSS(WorldPos, 0, light);
+            switch (light.ShadowSizeSliceRangeMode.w) {
+                case 1: atten *= _sampleCubeShadowPCSS(WorldPos, 0, light); break;
+                case 2: atten *= _sampleCubeShadowPCF16(WorldPos, 0, light); break;
+            default:
+                atten *= _sampleCubeShadowRude(WorldPos, 0, light); break;
+            }
+            
+            //atten *= _sampleCubeShadowPCSS(WorldPos, 0, light);
             //atten *= _sampleCubeShadowRude(WorldPos, 0.0, light);
         }
         

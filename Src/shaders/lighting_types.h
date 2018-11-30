@@ -15,7 +15,7 @@ struct Light {
     float3 Dir;
     float2 Angles;
     uint   MatrixOffset;  
-    int3   ShadowSizeSliceRange;
+    int4   ShadowSizeSliceRangeMode;
 };
 
 struct ListNode {

@@ -48,7 +48,7 @@ type
     Dir      : TVec3;
     Angles   : TVec2;
     MatrixOffset: Cardinal;
-    ShadowSizeSliceRange : TVec3i;
+    ShadowSizeSliceRangeMode : TVec4i;
     class function Layout(): IDataLayout; static;
   end;
   PLightData = ^TLightData;
@@ -60,6 +60,7 @@ type
   end;
 
   IGeometryRenderer = interface
+    procedure PreapreObjects(const ALight: TavLightSource; out AHasDynamic: Boolean);
     procedure ShadowPassGeometry(const ALight: TavLightSource; const ALightData: TLightData);
     procedure DrawTransparentGeometry();
   end;
@@ -67,6 +68,7 @@ type
   TavLightRenderer = class;
 
   TShadowsType = (stNone, st64, st128, st256, st512, st1024, st2048);
+  TShadowsRenderType = (srtRude, srtPCSS, srtPCF);
 const
   cShadowsTypeSize: array [TShadowsType] of Integer = (0, 64, 128, 256, 512, 1024, 2048);
 
@@ -76,7 +78,10 @@ type
 
   TavLightSource = class(TavObject)
   protected
+    FShadowValid: Boolean;
     FCastShadows: TShadowsType;
+    FShadowRenderType: TShadowsRenderType;
+    FAuto_ShadowRenderType: Boolean;
     FLightIndex : Integer;
 
     FShadowSlice: IShadowSlice;
@@ -87,6 +92,7 @@ type
 
     function AllocShadowSlices: IShadowSlice; virtual; abstract;
     procedure SetCastShadows(const AValue: TShadowsType); virtual;
+    procedure SetShadowRenderType(const AValue: TShadowsRenderType);
 
     procedure SetAdapter(const AAdapter: IavLightAdapter);
   protected
@@ -95,11 +101,20 @@ type
     procedure InvalidateLight;
     procedure ValidateLight(const AMain: TavMainRender); virtual;
   public
+    function BBox: TAABB; virtual; abstract;
+
     function InFrustum(const AFrustum: TFrustum): Boolean; virtual;
 
     function ShadowSlice: IShadowSlice;
 
+    property ShadowValid: Boolean read FShadowValid write FShadowValid;
     property CastShadows: TShadowsType read FCastShadows write SetCastShadows;
+    property ShadowRenderType: TShadowsRenderType read FShadowRenderType write SetShadowRenderType;
+
+    property Auto_ShadowRenderType: Boolean read FAuto_ShadowRenderType write FAuto_ShadowRenderType;
+
+    procedure EvalAutos(const AViewProj: TMat4; const AFrameSize: TVec2); virtual;
+
     function Matrices: PShadowMatrix;
     function MatricesCount: Integer;
 
@@ -114,12 +129,16 @@ type
   { IavLightSource }
 
   IavLightSource = interface (IavLightAdapter)
+    function GetAuto_ShadowRenderType: Boolean;
     function GetCastShadows: TShadowsType;
+    procedure SetAuto_ShadowRenderType(const AValue: Boolean);
     procedure SetCastShadows(const AValue: TShadowsType);
 
     function ShadowSlice: IShadowSlice;
 
     property CastShadows: TShadowsType read GetCastShadows write SetCastShadows;
+    property Auto_ShadowRenderType: Boolean read GetAuto_ShadowRenderType write SetAuto_ShadowRenderType;
+
     function Matrices: PShadowMatrix;
     function MatricesCount: Integer;
   end;
@@ -201,7 +220,11 @@ type
     function AllocShadowSlices: IShadowSlice; override;
     procedure ValidateLight(const AMain: TavMainRender); override;
   public
+    function BBox: TAABB; override;
+
     function InFrustum(const AFrustum: TFrustum): Boolean; override;
+
+    procedure EvalAutos(const AViewProj: TMat4; const AFrameSize: TVec2); override;
 
     property Pos   : TVec3  read FPos    write SetPos;
     property Radius: Single read FRadius write SetRadius;
@@ -231,6 +254,8 @@ type
     function AllocShadowSlices: IShadowSlice; override;
     procedure ValidateLight(const AMain: TavMainRender); override;
   public
+    function BBox: TAABB; override;
+
     function InFrustum(const AFrustum: TFrustum): Boolean; override;
 
     property Pos: TVec3 read FPos write SetPos;
@@ -310,6 +335,8 @@ type
   public
     procedure InvalidateShaders;
 
+    procedure InvalidateShadowsAt(const ABox: TAABB);
+
     function AddPointLight(): IavPointLight;
     function AddDirectionalLight(): IavDirectionalLight;
     function AddSpotLight(): IavSpotLight;
@@ -332,6 +359,8 @@ type
 
 implementation
 
+uses Math;
+
 const
   cComputeDispatchSize = 4;
   cAverageLightsPerCluster = 4;
@@ -342,7 +371,9 @@ type
 
   TavLightSourceAdapter = class (TInterfacedObject, IavLightSource)
   private
+    function GetAuto_ShadowRenderType: Boolean;
     function GetCastShadows: TShadowsType;
+    procedure SetAuto_ShadowRenderType(const AValue: Boolean);
     procedure SetCastShadows(const AValue: TShadowsType);
     function ShadowSlice: IShadowSlice;
     function Matrices: PShadowMatrix;
@@ -558,6 +589,7 @@ begin
   AValue.y := Clamp(AValue.y, EPS, Pi - EPS);
   if FAngles = AValue then Exit;
   FAngles := AValue;
+  ShadowValid := False;
   InvalidateLight;
 end;
 
@@ -573,6 +605,7 @@ begin
   if LenSqr(AValue) = 0 then Exit;
   if FDir = AValue then Exit;
   FDir := AValue;
+  ShadowValid := False;
   InvalidateLight;
 end;
 
@@ -580,6 +613,7 @@ procedure TavSpotLight.SetPos(const AValue: TVec3);
 begin
   if FPos = AValue then Exit;
   FPos := AValue;
+  ShadowValid := False;
   InvalidateLight;
 end;
 
@@ -587,6 +621,7 @@ procedure TavSpotLight.SetRadius(const AValue: Single);
 begin
   if FRadius = AValue then Exit;
   FRadius := AValue;
+  ShadowValid := False;
   InvalidateLight;
 end;
 
@@ -672,13 +707,19 @@ begin
     FMatrices.Item[0] := BuildMatrix;
     FMatricesHandle := LightRenderer.FLightMatricesSB.Add(FMatrices as IVerticesData);
     pld^.MatrixOffset := FMatricesHandle.Offset;
-    pld^.ShadowSizeSliceRange := FShadowSlice.SizeSliceRange;
+    pld^.ShadowSizeSliceRangeMode := Vec(FShadowSlice.SizeSliceRange, Ord(FShadowRenderType));
   end
   else
   begin
     pld^.MatrixOffset := 0;
-    pld^.ShadowSizeSliceRange := Vec(-1,-1,-1);
+    pld^.ShadowSizeSliceRangeMode := Vec(-1,-1,-1, Ord(FShadowRenderType));
   end;
+end;
+
+function TavSpotLight.BBox: TAABB;
+begin
+  Result.min := FPos - Vec(FRadius, FRadius, FRadius);
+  Result.max := FPos + Vec(FRadius, FRadius, FRadius);
 end;
 
 function TavSpotLight.InFrustum(const AFrustum: TFrustum): Boolean;
@@ -765,10 +806,22 @@ end;
 
 { TavLightSourceAdapter }
 
+function TavLightSourceAdapter.GetAuto_ShadowRenderType: Boolean;
+begin
+  if GetLightSource = nil then Exit(False);
+  Result := GetLightSource.Auto_ShadowRenderType;
+end;
+
 function TavLightSourceAdapter.GetCastShadows: TShadowsType;
 begin
   if GetLightSource = nil then Exit(stNone);
   Result := GetLightSource.CastShadows;
+end;
+
+procedure TavLightSourceAdapter.SetAuto_ShadowRenderType(const AValue: Boolean);
+begin
+  if GetLightSource = nil then Exit();
+  GetLightSource.Auto_ShadowRenderType := AValue;
 end;
 
 procedure TavLightSourceAdapter.SetCastShadows(const AValue: TShadowsType);
@@ -1000,7 +1053,7 @@ begin
               .Add('Dir', ctFloat, 3)
               .Add('Angles', ctFloat, 2)
               .Add('MatrixOffset', ctUInt, 1)
-              .Add('ShadowSizeSliceRange', ctInt, 3)
+              .Add('ShadowSizeSliceRangeMode', ctInt, 4)
               .Finish();
 end;
 
@@ -1010,6 +1063,7 @@ procedure TavPointLight.SetPos(const AValue: TVec3);
 begin
   if FPos = AValue then Exit;
   FPos := AValue;
+  ShadowValid := False;
   InvalidateLight;
 end;
 
@@ -1024,6 +1078,7 @@ procedure TavPointLight.SetRadius(const AValue: Single);
 begin
   if FRadius = AValue then Exit;
   FRadius := AValue;
+  ShadowValid := False;
   InvalidateLight;
 end;
 
@@ -1057,18 +1112,47 @@ begin
     PPointLightMatrices(FMatrices.PItem[0])^.Init(Pos, Radius, AMain.Projection.DepthRange);
     FMatricesHandle := LightRenderer.FLightMatricesSB.Add(FMatrices as IVerticesData);
     pld^.MatrixOffset := FMatricesHandle.Offset;
-    pld^.ShadowSizeSliceRange := FShadowSlice.SizeSliceRange;
+    pld^.ShadowSizeSliceRangeMode := Vec(FShadowSlice.SizeSliceRange, Ord(FShadowRenderType));
   end
   else
   begin
     pld^.MatrixOffset := 0;
-    pld^.ShadowSizeSliceRange := Vec(-1,-1,-1);
+    pld^.ShadowSizeSliceRangeMode := Vec(-1,-1,-1, Ord(FShadowRenderType));
   end;
+end;
+
+function TavPointLight.BBox: TAABB;
+begin
+  Result.min := FPos - Vec(FRadius, FRadius, FRadius);
+  Result.max := FPos + Vec(FRadius, FRadius, FRadius);
 end;
 
 function TavPointLight.InFrustum(const AFrustum: TFrustum): Boolean;
 begin
   Result := LightIntersectFrusum(Pos, Vec(0,0,0), Radius, 0, AFrustum);
+end;
+
+procedure TavPointLight.EvalAutos(const AViewProj: TMat4; const AFrameSize: TVec2);
+
+  function GetLightSizeInPixels: Single;
+  var ppt: TVec4;
+  begin
+    ppt := Vec(FPos, 1.0) * AViewProj;
+    Result := FSize / max(ppt.w, 0.01) * AFrameSize.y;
+  end;
+
+var s: Single;
+begin
+  if FCastShadows = stNone then Exit;
+
+  if FAuto_ShadowRenderType then
+  begin
+    s := GetLightSizeInPixels;
+    if (s < 8) and (ShadowRenderType <> srtRude) then
+      ShadowRenderType := srtRude;
+    if (s > 12) and (ShadowRenderType <> srtPCSS) then
+      ShadowRenderType := srtPCSS;
+  end;
 end;
 
 procedure TavPointLight.AfterConstruction;
@@ -1081,11 +1165,19 @@ end;
 
 { TavLightSource }
 
+procedure TavLightSource.SetShadowRenderType(const AValue: TShadowsRenderType);
+begin
+  if FShadowRenderType = AValue then Exit;
+  FShadowRenderType := AValue;
+  InvalidateLight;
+end;
+
 procedure TavLightSource.SetCastShadows(const AValue: TShadowsType);
 begin
   if FCastShadows = AValue then Exit;
   FCastShadows := AValue;
   FShadowSlice := AllocShadowSlices();
+  ShadowValid := False;
   InvalidateLight;
 end;
 
@@ -1132,6 +1224,11 @@ end;
 function TavLightSource.ShadowSlice: IShadowSlice;
 begin
   Result := FShadowSlice;
+end;
+
+procedure TavLightSource.EvalAutos(const AViewProj: TMat4;
+  const AFrameSize: TVec2);
+begin
 end;
 
 constructor TavLightSource.Create(AParent: TavObject);
@@ -1204,6 +1301,16 @@ begin
   FRenderCluster_Prog.Invalidate;
 end;
 
+procedure TavLightRenderer.InvalidateShadowsAt(const ABox: TAABB);
+var
+  i: Integer;
+begin
+  for i := 0 to FLights.Count - 1 do
+    if FLights[i].ShadowValid then
+      if Intersect(FLights[i].BBox, ABox) then
+        FLights[i].ShadowValid := False;
+end;
+
 function TavLightRenderer.AddPointLight(): IavPointLight;
 begin
   Result := TavPointLightAdapter.Create(TavPointLight.Create(Self));
@@ -1232,14 +1339,37 @@ begin
 end;
 
 procedure TavLightRenderer.Render(const ARenderer: IGeometryRenderer);
+type
+  IIntArr = {$IfDef FPC}specialize{$EndIf}IArray<Integer>;
+  TIntArr = {$IfDef FPC}specialize{$EndIf}TArray<Integer>;
 var
-  i: Integer;
+  vp: TMat4;
+  i, ii: Integer;
   ld: TLightData;
   fbo: TavFrameBuffer;
 
   pbox: TAABB;
   f: TFrustum;
+  hasDynamic: Boolean;
+
+  visibleLightsWithShadows: IIntArr;
 begin
+  pbox.min := Vec(-1,-1,Main.Projection.DepthRange.x);
+  pbox.max := Vec( 1, 1,Main.Projection.DepthRange.y);
+  vp := Main.Camera.Matrix * Main.Projection.Matrix;
+  f.Init(Inv(vp), pbox);
+
+  visibleLightsWithShadows := TIntArr.Create();
+  for i := 0 to FLights.Count - 1 do
+  begin
+    if not FLights[i].InFrustum(f) then
+      Continue;
+    if FLights[i].CastShadows = stNone then
+      Continue;
+    visibleLightsWithShadows.Add(i);
+    FLights[i].EvalAutos(vp, Main.WindowSize);
+  end;
+
   BuildHeadBuffer;
 
 //  fbo := FCubes512.GetFBOAll();
@@ -1247,32 +1377,31 @@ begin
 //  fbo.Select();
 //  fbo.ClearDS(Main.Projection.DepthRange.y);
 
-  pbox.min := Vec(-1,-1,Main.Projection.DepthRange.x);
-  pbox.max := Vec( 1, 1,Main.Projection.DepthRange.y);
-  f.Init(Inv(Main.Camera.Matrix * Main.Projection.Matrix), pbox);
-
-  for i := 0 to FLights.Count - 1 do
+  for i := 0 to visibleLightsWithShadows.Count - 1 do
   begin
-    if not FLights[i].InFrustum(f) then
+    ii := visibleLightsWithShadows[i];
+    ARenderer.PreapreObjects(FLights[ii], hasDynamic);
+    if (not hasDynamic) and FLights[ii].ShadowValid then
       Continue;
-    if FLights[i].CastShadows = stNone then
-      Continue;
+    FLights[ii].ShadowValid := True;
 
-    ld := FLightsData[i];
-    if (ld.ShadowSizeSliceRange.y >= 0) then
+    //if GetKeyState(VK_CONTROL) < 0 then Continue;
+
+    ld := FLightsData[ii];
+    if (ld.ShadowSizeSliceRangeMode.y >= 0) then
     begin
       if LenSqr(ld.Dir) = 0 then
       begin
-        fbo := FCubes[FLights[i].CastShadows].GetFBO(ld.ShadowSizeSliceRange);
+        fbo := FCubes[FLights[ii].CastShadows].GetFBO(ld.ShadowSizeSliceRangeMode.xyz);
       end
       else
       begin
-        fbo := FSpots[FLights[i].CastShadows].GetFBO(ld.ShadowSizeSliceRange);
+        fbo := FSpots[FLights[ii].CastShadows].GetFBO(ld.ShadowSizeSliceRangeMode.xyz);
       end;
-      fbo.FrameRect := RectI(0, 0, ld.ShadowSizeSliceRange.x, ld.ShadowSizeSliceRange.x);
+      fbo.FrameRect := RectI(0, 0, ld.ShadowSizeSliceRangeMode.x, ld.ShadowSizeSliceRangeMode.x);
       fbo.Select();
       fbo.ClearDS(Main.Projection.DepthRange.y);
-      ARenderer.ShadowPassGeometry( FLights[i], ld);
+      ARenderer.ShadowPassGeometry( FLights[ii], ld);
     end;
   end;
 end;
@@ -1312,7 +1441,7 @@ var cSize: TVec3i;
     st: TShadowsType;
 begin
   inherited AfterConstruction;
-  cSize := Vec(4,4,4)*4;
+  cSize := Vec(4,4,4);//*4;
   cSize := cSize * cComputeDispatchSize;
 
   FLights := TavLightArr.Create();

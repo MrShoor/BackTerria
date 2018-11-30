@@ -107,13 +107,31 @@
         "Vertex"   : "avMesh_pbr_packed.cpp",
         "Fragment" : "avMesh_pbr_packed.cpp",
         "Path"     :["avMesh"]
+        },
+        {
+        "Name"     : "avMeshPbrPackedToGBuffer",
+        "Vertex"   : "avMesh_pbr_packed_toGBuffer.cpp",
+        "Fragment" : "avMesh_pbr_packed_toGBuffer.cpp",
+        "Path"     :["avMesh"]
+        },
+        {
+        "Name"     : "avMeshPbrGLightPass",
+        "Vertex"   : "avMesh_pbr_LightPass.cpp",
+        "Fragment" : "avMesh_pbr_LightPass.cpp",
+        "Path"     :["avMesh"]
         }
     ],
     "_Programs":[
         {
-        "Name"     : "avMeshPbrPacked",
-        "Vertex"   : "avMesh_pbr_packed.cpp",
-        "Fragment" : "avMesh_pbr_packed.cpp",
+        "Name"     : "avMeshPbrPackedToGBuffer",
+        "Vertex"   : "avMesh_pbr_packed_toGBuffer.cpp",
+        "Fragment" : "avMesh_pbr_packed_toGBuffer.cpp",
+        "Path"     :["avMesh"]
+        },
+        {
+        "Name"     : "avMeshPbrGLightPass",
+        "Vertex"   : "avMesh_pbr_LightPass.cpp",
+        "Fragment" : "avMesh_pbr_LightPass.cpp",
         "Path"     :["avMesh"]
         }
     ]
