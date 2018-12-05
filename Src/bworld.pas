@@ -65,7 +65,8 @@ type
     procedure SetStatic(const AValue: Boolean); virtual;
   protected
     FSubscribed: Boolean;
-    procedure SubscribeForUpdateStep;
+    FUnsubscribeTime: Int64;
+    procedure SubscribeForUpdateStep(const ASubscribeDuration: Integer = -1);
     procedure UnSubscribeFromUpdateStep;
     procedure UpdateStep; virtual;
     procedure RegisterAsUIObject;
@@ -102,6 +103,7 @@ type
     function GetVisible(): Boolean; virtual;
 
     procedure AfterConstruction; override;
+    constructor Create(AParent: TavObject); override;
     destructor Destroy; override;
   end;
   TbGameObjArr = {$IfDef FPC}specialize{$EndIf}TArray<TbGameObject>;
@@ -822,6 +824,8 @@ begin
   FModelsPBRProgram.Invalidate;
   FModelsEmissionProgram.Invalidate;
   FModelsShadowProgram.Invalidate;
+  FModelsPBRProgramToGBuffer.Invalidate;
+  FModelsPBRProgramLightPass.Invalidate;
 end;
 
 function TbWorldRenderer.GraphicalObjects: IbGraphicalObjectSet;
@@ -905,6 +909,7 @@ var gobj: TbGraphicalObject;
 begin
   Main.States.CullMode := cmBack;
 
+  Main.States.Blending[AllTargets] := False;
  //opacity pass
   UpdateAllModels(mtDefault);
   FGBufferForOpacity.FrameRect := RectI(Vec(0,0),Main.WindowSize);
@@ -925,6 +930,7 @@ begin
   FModelsPBRProgramLightPass.Draw(ptTriangleStrip, cmNone, False, 0, 0, 4);
 
  //draw non depth objects
+  Main.States.Blending[0] := True;
   Main.States.DepthWrite := False;
   FGBufferForTransparent.FrameRect := RectI(Vec(0,0),Main.WindowSize);
   FGBufferForTransparent.Select();
@@ -1128,7 +1134,8 @@ end;
 
 procedure TbGameObject.InvalidateTransform;
 begin
-  FWorld.FRenderer.FLightRenderer.InvalidateShadowsAt(AbsBBox());
+  if FTransformValid then
+    FWorld.FRenderer.FLightRenderer.InvalidateShadowsAt(AbsBBox());
   FTransformValid := False;
 end;
 
@@ -1142,10 +1149,14 @@ begin
   Result := FRot;
 end;
 
-procedure TbGameObject.SubscribeForUpdateStep;
+procedure TbGameObject.SubscribeForUpdateStep(const ASubscribeDuration: Integer);
 begin
   FWorld.FUpdateSubs.Add(Self);
   FSubscribed := True;
+  if ASubscribeDuration > 0 then
+    FUnsubscribeTime := FWorld.GameTime + ASubscribeDuration
+  else
+    FUnsubscribeTime := -1;
 end;
 
 procedure TbGameObject.UnSubscribeFromUpdateStep;
@@ -1156,6 +1167,9 @@ end;
 
 procedure TbGameObject.UpdateStep;
 begin
+  if FUnsubscribeTime > 0 then
+    if FWorld.GameTime > FUnsubscribeTime then
+      UnSubscribeFromUpdateStep;
 end;
 
 procedure TbGameObject.RegisterAsUIObject;
@@ -1256,8 +1270,6 @@ end;
 procedure TbGameObject.AfterConstruction;
 begin
   inherited AfterConstruction;
-  FScale := 1;
-  FRot.v4 := Vec(0,0,0,1);
 
   FWorld.FObjects.Add(Self);
 
@@ -1266,6 +1278,13 @@ begin
   FTransparent := TavModelInstanceArr.Create;
 
   UpdateAtTree;
+end;
+
+constructor TbGameObject.Create(AParent: TavObject);
+begin
+  FScale := 1;
+  FRot.v4 := Vec(0,0,0,1);
+  inherited Create(AParent);
 end;
 
 destructor TbGameObject.Destroy;

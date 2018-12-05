@@ -36,7 +36,6 @@ struct PS_Output {
 
 PS_Output PS(VS_Output In) {
     PS_Output Out;
-    
     int3 pixel_crd = int3(In.Pos.xy, 0);
     
     float4 albedo = Albedo.Load(pixel_crd);
@@ -58,6 +57,6 @@ PS_Output PS(VS_Output In) {
     F0 = lerp(F0, albedo.xyz, rg_ao_mtl.z);
 
     Out.Color = Clustered_GGX(pCoord.xyz, vCoord.xyz, wCoord.xyz, norm, normalize(vCoord.xyz), albedo, F0, rg_ao_mtl.z, rg_ao_mtl.x);
-    Out.Color *= rg_ao_mtl.y;
+    Out.Color.xyz *= rg_ao_mtl.y;
     return Out;
 }
