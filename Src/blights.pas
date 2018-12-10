@@ -330,6 +330,7 @@ type
 
     FRenderCluster_Prog: TavProgram;
 
+    procedure InvalidateAllLights;
     procedure ValidateLights;
     procedure BuildHeadBuffer;
   public
@@ -1252,9 +1253,19 @@ begin
   LightRenderer.FInvalidLights.Delete(Self);
   l := LightRenderer.FLights[FLightIndex];
   l.FLightIndex := FLightIndex;
+
+  LightRenderer.InvalidateAllLights;
 end;
 
 { TavLightRenderer }
+
+procedure TavLightRenderer.InvalidateAllLights;
+var
+  i: Integer;
+begin
+  for i := 0 to FLights.Count - 1 do
+    FLights[i].InvalidateLight;
+end;
 
 procedure TavLightRenderer.ValidateLights;
 var l: TavLightSource;

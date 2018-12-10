@@ -30,6 +30,7 @@ PS_Output PS(VS_Output In) {
     PS_Output Out;
     ModelMaterialDesc m = LoadMaterialDesc((int)In.MatIndex);    
     //Out.Color = m.Diff;// m.Shading_Emit(In.vTex, m.Diff) * m.Hardness_IOR_EmitFactor.z * 10.0;
-    Out.Color = m.Shading_Emit(In.vTex, m.Diff) * m.Hardness_IOR_EmitFactor.z * 2.0;
+    Out.Color = m.Shading_Emit(In.vTex, m.Diff);
+    Out.Color.xyz *= m.Hardness_IOR_EmitFactor.z * 2.0;
     return Out;
 }

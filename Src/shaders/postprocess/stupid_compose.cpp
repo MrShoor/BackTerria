@@ -68,8 +68,9 @@ static const float EmiLODWeight[4] = {0.1, 0.15, 0.34, 0.6};
 
 PS_Output PS(VS_Output In) {
     PS_Output Out;
-    Out.Color = Color.Load(int3(In.Pos.xy,0)) + Emission.Sample(EmissionSampler, In.UV);
+    Out.Color = Color.Load(int3(In.Pos.xy,0));
     Out.Color.xyz = Uncharted2TonemapFull(Out.Color.xyz);
+    Out.Color += Emission.Sample(EmissionSampler, In.UV);
     //Out.Color.xyz = pow(abs(Out.Color.xyz), 1/2.2);
 //    float4 emi = 0.0;
 //    float lod = StartEmissionLOD;
