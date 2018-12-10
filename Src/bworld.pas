@@ -36,6 +36,9 @@ type
 
   TModelType = (mtDefault, mtEmissive, mtTransparent);
 
+  IOverrideColorArr = {$IfDef FPC}specialize{$EndIf} IArray<TVec3>;
+  TOverrideColorArr = {$IfDef FPC}specialize{$EndIf} TArray<TVec3>;
+
   { TbGameObject }
 
   TbGameObject = class (TavMainRenderChild)
@@ -82,6 +85,7 @@ type
     procedure ClearModels(AType: TModelType); virtual;
     procedure AddModel(const AName: string; AType: TModelType = mtDefault); virtual;
     procedure WriteModels(const ACollection: IavModelInstanceArr; AType: TModelType); virtual;
+    procedure WriteDepthOverrideModels(const ACollection: IavModelInstanceArr; const ADepthOverride: IOverrideColorArr); virtual;
     procedure WriteParticles(const ACollection: IParticlesHandleArr); virtual;
 
     function  UIIndex: Integer; virtual;
@@ -223,16 +227,17 @@ type
 
     FParticles: TbParticleSystem;
 
-    FST_Albedo  : TavTexture;
-    FST_Normals : TavTexture;
-    FST_Material: TavTexture;
-    FST_Depth   : TavTexture;
-    FST_Emission: TavTexture;
-    FST_Lighted : TavTexture;
+    FST_Albedo        : TavTexture;
+    FST_Normals       : TavTexture;
+    FST_Material      : TavTexture;
+    FST_Depth         : TavTexture;
+    FST_Emission      : TavTexture;
+    FST_Lighted       : TavTexture;
 
     FGBufferForOpacity: TavFrameBuffer;
     FGBufferForLightPass: TavFrameBuffer;
     FGBufferForTransparent: TavFrameBuffer;
+    FGBufferDepthOverride: TavFrameBuffer;
     FEmissionFBO: TavFrameBuffer;
 
     FCubeUtils: TbCubeUtils;
@@ -249,6 +254,7 @@ type
     FModelsPBRProgram: TavProgram;
     FModelsShadowProgram: TavProgram;
     FModelsEmissionProgram: TavProgram;
+    FModelsMeshOverrideProgram: TavProgram;
 
     FCubeDrawProgram: TavProgram;
 
@@ -261,11 +267,16 @@ type
     procedure AfterRegister; override;
   protected
     FAllModels: IavModelInstanceArr;
+    FAllModelsPostOverride: IavModelInstanceArr;
+    FOverrideModelsArr : IavModelInstanceArr;
+    FOverrideModelsSet : IavModelInstanceSet;
+    FOverrideColors : IOverrideColorArr;
     FQueryResult: IbGameObjArr;
 
     FOnAfterDraw: TNotifyEvent;
     procedure UpdateVisibleObjects;
     procedure UpdateAllModels(AModelType: TModelType);
+    procedure UpdateAllOverrideModels();
   protected
     FGObjs: IbGraphicalObjectSet;
     procedure RegisterGraphicalObject(const gobj: TbGraphicalObject);
@@ -755,6 +766,7 @@ begin
   FGBufferForOpacity := Create_FrameBuffer(Self, [FST_Albedo, FST_Normals, FST_Material, FST_Depth]);
   FGBufferForLightPass := Create_FrameBuffer(Self, [FST_Lighted]);
   FGBufferForTransparent := Create_FrameBuffer(Self, [FST_Lighted, FST_Depth]);
+  FGBufferDepthOverride := Create_FrameBuffer(Self, [FST_Albedo, FST_Depth]);
   FEmissionFBO := Create_FrameBuffer(Self, [FST_Emission, FST_Depth]);
 
   FModelsProgram := TavProgram.Create(Self);
@@ -775,6 +787,9 @@ begin
   FModelsShadowProgram.Load('avMesh_shadow', SHADERS_FROMRES, SHADERS_DIR);
   FModelsEmissionProgram := TavProgram.Create(Self);
   FModelsEmissionProgram.Load('avMesh_emission', SHADERS_FROMRES, SHADERS_DIR);
+  FModelsMeshOverrideProgram := TavProgram.Create(Self);
+  FModelsMeshOverrideProgram.Load('avMeshDepthOverride', SHADERS_FROMRES, SHADERS_DIR);
+
   FCubeDrawProgram := TavProgram.Create(Self);
   FCubeDrawProgram.Load('cubemap_out', SHADERS_FROMRES, SHADERS_DIR);
   FModels := TavModelCollection.Create(Self);
@@ -787,6 +802,10 @@ begin
   FGObjs := TbGraphicalObjectSet.Create();
 
   FAllModels := TavModelInstanceArr.Create();
+  FAllModelsPostOverride := TavModelInstanceArr.Create();
+  FOverrideModelsArr := TavModelInstanceArr.Create();
+  FOverrideModelsSet := TavModelInstanceSet.Create();
+  FOverrideColors := TOverrideColorArr.Create();
 end;
 
 procedure TbWorldRenderer.UpdateVisibleObjects;
@@ -803,6 +822,31 @@ begin
   FAllModels.Clear();
   for i := 0 to FQueryResult.Count - 1 do
     FQueryResult[i].WriteModels(FAllModels, AModelType);
+
+  if AModelType = TModelType.mtDefault then
+  begin
+    FAllModelsPostOverride.Clear();
+    for i := FAllModels.Count - 1 downto 0 do
+      if FOverrideModelsSet.Contains(FAllModels[i]) then
+      begin
+        FAllModelsPostOverride.Add(FAllModels[i]);
+        FAllModels.DeleteWithSwap(i);
+      end;
+  end;
+end;
+
+procedure TbWorldRenderer.UpdateAllOverrideModels();
+var
+  i: Integer;
+begin
+  FOverrideModelsArr.Clear();
+  FOverrideColors.Clear();
+  FOverrideModelsSet.Clear();
+  for i := 0 to FQueryResult.Count - 1 do
+    FQueryResult[i].WriteDepthOverrideModels(FOverrideModelsArr, FOverrideColors);
+
+  for i := 0 to FOverrideModelsArr.Count - 1 do
+    FOverrideModelsSet.Add(FOverrideModelsArr[i]);
 end;
 
 procedure TbWorldRenderer.RegisterGraphicalObject(const gobj: TbGraphicalObject);
@@ -823,6 +867,7 @@ begin
   FModelsProgram_NoLight.Invalidate;
   FModelsPBRProgram.Invalidate;
   FModelsEmissionProgram.Invalidate;
+  FModelsMeshOverrideProgram.Invalidate;
   FModelsShadowProgram.Invalidate;
   FModelsPBRProgramToGBuffer.Invalidate;
   FModelsPBRProgramLightPass.Invalidate;
@@ -906,7 +951,10 @@ procedure TbWorldRenderer.DrawWorld;
   end;
 
 var gobj: TbGraphicalObject;
+  i: Integer;
 begin
+  UpdateAllOverrideModels();
+
   Main.States.CullMode := cmBack;
 
   Main.States.Blending[AllTargets] := False;
@@ -918,6 +966,29 @@ begin
   FModelsPBRProgramToGBuffer.Select();
   FModels.Select();
   FModels.Draw(FAllModels);
+
+ //depth override pass
+  FGBufferDepthOverride.FrameRect := RectI(Vec(0,0),Main.WindowSize);
+  FGBufferDepthOverride.Select();
+  Main.States.DepthFunc := cfLess;
+  Main.States.DepthWrite := False;
+  Main.States.Blending[0] := True;
+  FModelsMeshOverrideProgram.Select();
+  FModels.Select;
+  for i := 0 to FOverrideModelsArr.Count - 1 do
+  begin
+    FModelsMeshOverrideProgram.SetUniform('OverrideColor', FOverrideColors[i]);
+    FModels.Draw(FOverrideModelsArr[i]);
+  end;
+  Main.States.Blending[0] := False;
+  Main.States.DepthWrite := True;
+  Main.States.DepthFunc := cfGreater;
+
+ //opacity pass (post override)
+  FGBufferForOpacity.Select;
+  FModelsPBRProgramToGBuffer.Select();
+  FModels.Select();
+  FModels.Draw(FAllModelsPostOverride);
 
  //light pass
   FGBufferForLightPass.FrameRect := RectI(Vec(0,0),Main.WindowSize);
@@ -1207,6 +1278,13 @@ begin
     mtEmissive : ACollection.AddArray(FEmissive);
     mtTransparent : ACollection.AddArray(FTransparent);
   end;
+end;
+
+procedure TbGameObject.WriteDepthOverrideModels(
+  const ACollection: IavModelInstanceArr;
+  const ADepthOverride: IOverrideColorArr);
+begin
+
 end;
 
 procedure TbGameObject.WriteParticles(const ACollection: IParticlesHandleArr);

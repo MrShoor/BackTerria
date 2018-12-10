@@ -119,19 +119,19 @@
         "Vertex"   : "avMesh_pbr_LightPass.cpp",
         "Fragment" : "avMesh_pbr_LightPass.cpp",
         "Path"     :["avMesh"]
+        },
+        {
+        "Name"     : "avMeshDepthOverride",
+        "Vertex"   : "avMesh_DepthOverride.cpp",
+        "Fragment" : "avMesh_DepthOverride.cpp",
+        "Path"     :["avMesh"]
         }
     ],
     "_Programs":[
         {
-        "Name"     : "avMeshPbrPackedToGBuffer",
-        "Vertex"   : "avMesh_pbr_packed_toGBuffer.cpp",
-        "Fragment" : "avMesh_pbr_packed_toGBuffer.cpp",
-        "Path"     :["avMesh"]
-        },
-        {
-        "Name"     : "avMeshPbrGLightPass",
-        "Vertex"   : "avMesh_pbr_LightPass.cpp",
-        "Fragment" : "avMesh_pbr_LightPass.cpp",
+        "Name"     : "avMeshDepthOverride",
+        "Vertex"   : "avMesh_DepthOverride.cpp",
+        "Fragment" : "avMesh_DepthOverride.cpp",
         "Path"     :["avMesh"]
         }
     ]

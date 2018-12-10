@@ -122,7 +122,8 @@ begin
   FStupidComposeProgram.Invalidate;
 end;
 
-procedure TavPostProcess.DoComposeOnly(AGbuffer: TavFrameBuffer; AEmissionBuffer: TavFrameBuffer);
+procedure TavPostProcess.DoComposeOnly(AGbuffer: TavFrameBuffer;
+  AEmissionBuffer: TavFrameBuffer);
 var blurstep: Single;
     emitsize: TVec2i;
 begin
