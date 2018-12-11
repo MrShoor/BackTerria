@@ -527,8 +527,18 @@ float3 CookTorrance_GGX(float3 n, float3 l, float3 v, float3 h, float3 F0, float
     return max(0.0, albedo*diffK*NL + specK);
 }
 
+float EnvMult(float3 sampledir) {
+    //return pow(abs((sampledir.y + 1.0)*0.5), 2.0)*2.0;
+    return 2.0;
+}
+
+float3 EnvGamma(float3 sample) {
+    return pow(abs(sample), 2.2);
+}
+
 float4 Clustered_GGX(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 Normal, float3 ViewDir, float4 Albedo, float3 F0, float metallic, float roughness) {
     float4 Out = float4(EnvAmbientColor.xyz*Albedo.xyz*EnvAmbientColor.w, Albedo.a);
+    roughness = clamp(roughness, 0.01, 0.99);
     
     float z = (ViewPos.z - planesNearFar.x) / (planesNearFar.y - planesNearFar.x);
     ProjPos.xy *= 0.5;
@@ -538,7 +548,7 @@ float4 Clustered_GGX(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 Nor
     uint nodeIdx = light_headBuffer[crd];
     int i = 0;
     
-    float3 v = -ViewDir;    
+    float3 v = -ViewDir;  
     while ((nodeIdx != 0xffffffff)&&(i<10)) {
         ListNode node = light_linkedList[nodeIdx];
         nodeIdx = node.NextNode;
@@ -576,21 +586,23 @@ float4 Clustered_GGX(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 Nor
         }
         
         Out.xyz += CookTorrance_GGX(Normal, l, v, h, F0, Albedo.xyz, roughness)*light.Color*atten;
-    }
+    }    
     
     if (EnvAmbientColor.w < 0.5) {
-        float NdotV = max(dot(Normal, v), 0.0);
+        float NdotV = saturate(dot(Normal, v));
         
         float3 kS = FresnelSchlickRoughness(F0, NdotV, roughness);
         float3 kD = 1.0 - kS;
         kD *= 1.0 - metallic;
                 
-        float3 irradiance = EnvIrradiance.Sample(EnvIrradianceSampler, mul(Normal, (float3x3)V_InverseMatrix)).rgb;
+        float3 cubeSampleDir = mul(Normal, (float3x3)V_InverseMatrix);
+        float3 irradiance = EnvGamma( EnvIrradiance.Sample(EnvIrradianceSampler, cubeSampleDir).rgb ) * EnvMult(cubeSampleDir);
         float3 diffuse    = irradiance * Albedo.xyz;
         
         float3 R = reflect(-v, Normal);
         float MAX_REFLECTION_LOD = 4.0;
-        float3 prefilteredColor = EnvRadiance.SampleLevel(EnvRadianceSampler, mul(R, (float3x3)V_InverseMatrix), roughness * MAX_REFLECTION_LOD).rgb;
+        cubeSampleDir = mul(R, (float3x3)V_InverseMatrix);
+        float3 prefilteredColor = EnvGamma( EnvRadiance.SampleLevel(EnvRadianceSampler, cubeSampleDir, roughness * MAX_REFLECTION_LOD).rgb ) * EnvMult(cubeSampleDir);
         float2 envBRDF  = brdfLUT.SampleLevel(brdfLUTSampler, float2(NdotV, roughness), 0).rg;
         float3 specular = prefilteredColor * (kS * envBRDF.x + envBRDF.y);
         float3 ambient = (kD * diffuse + specular);

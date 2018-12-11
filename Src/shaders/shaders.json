@@ -129,9 +129,9 @@
     ],
     "_Programs":[
         {
-        "Name"     : "avMeshDepthOverride",
-        "Vertex"   : "avMesh_DepthOverride.cpp",
-        "Fragment" : "avMesh_DepthOverride.cpp",
+        "Name"     : "avMeshPbrGLightPass",
+        "Vertex"   : "avMesh_pbr_LightPass.cpp",
+        "Fragment" : "avMesh_pbr_LightPass.cpp",
         "Path"     :["avMesh"]
         }
     ]

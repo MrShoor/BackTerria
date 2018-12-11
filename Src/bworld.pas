@@ -946,7 +946,7 @@ procedure TbWorldRenderer.DrawWorld;
       prog.SetUniform('EnvAmbientColor', Vec(0.0,0.0,0.0,0.0));
       prog.SetUniform('EnvRadiance', FEnviromentCube.Radiance, Sampler_Linear);
       prog.SetUniform('EnvIrradiance', FEnviromentCube.Irradiance, Sampler_Linear);
-      prog.SetUniform('brdfLUT', FbrdfLUT, Sampler_Linear);
+      prog.SetUniform('brdfLUT', FbrdfLUT, Sampler_LinearClamped);
     end;
   end;
 

@@ -42,6 +42,7 @@ PS_Output PS(VS_Output In) {
     albedo = pow(abs(albedo), 2.2);
     
     float3 norm = (Norm.Load(pixel_crd).xyz - 0.5) * 2.0;
+    norm = normalize(norm);
     float3 rg_ao_mtl = Rg_AO_Mtl.Load(pixel_crd).xyz;
     float depth = Depth.Load(pixel_crd).r;
     
