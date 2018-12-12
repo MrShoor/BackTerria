@@ -529,7 +529,7 @@ float3 CookTorrance_GGX(float3 n, float3 l, float3 v, float3 h, float3 F0, float
 
 float EnvMult(float3 sampledir) {
     //return pow(abs((sampledir.y + 1.0)*0.5), 2.0)*2.0;
-    return 2.0;
+    return 3.0;
 }
 
 float3 EnvGamma(float3 sample) {
@@ -548,7 +548,8 @@ float4 Clustered_GGX(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 Nor
     uint nodeIdx = light_headBuffer[crd];
     int i = 0;
     
-    float3 v = -ViewDir;  
+    float3 v = -ViewDir;
+    //[loop]
     while ((nodeIdx != 0xffffffff)&&(i<10)) {
         ListNode node = light_linkedList[nodeIdx];
         nodeIdx = node.NextNode;
@@ -586,7 +587,7 @@ float4 Clustered_GGX(float3 ProjPos, float3 ViewPos, float3 WorldPos, float3 Nor
         }
         
         Out.xyz += CookTorrance_GGX(Normal, l, v, h, F0, Albedo.xyz, roughness)*light.Color*atten;
-    }    
+    }
     
     if (EnvAmbientColor.w < 0.5) {
         float NdotV = saturate(dot(Normal, v));
