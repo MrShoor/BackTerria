@@ -871,6 +871,7 @@ begin
   FModelsShadowProgram.Invalidate;
   FModelsPBRProgramToGBuffer.Invalidate;
   FModelsPBRProgramLightPass.Invalidate;
+  FCubeUtils.InvalidateShaders;
 end;
 
 function TbWorldRenderer.GraphicalObjects: IbGraphicalObjectSet;

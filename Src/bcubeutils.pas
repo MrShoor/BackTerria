@@ -39,6 +39,7 @@ type
 
     procedure GenEnviromentFromCube(var AEnv: TEnviroment; const AEnvOwner: TavMainRenderChild; const ACubeMapFileName: string);
   public
+    procedure InvalidateShaders;
     procedure AfterConstruction; override;
   end;
 
@@ -162,6 +163,7 @@ end;
 
 procedure TbCubeUtils.GenEnviromentFromCube(var AEnv: TEnviroment; const AEnvOwner: TavMainRenderChild; const ACubeMapFileName: string);
 var cube: TavTexture;
+    oldBlendState: Boolean;
 begin
   if AEnv.Irradiance = nil then
   begin
@@ -180,11 +182,24 @@ begin
     cube.TargetFormat := TTextureFormat.RGBA16f;
     cube.TexData := LoadTexture(ACubeMapFileName);
 
+    oldBlendState := Main.States.Blending[0];
+    Main.States.Blending[0] := False;
     GenIrradianceFromCube(cube, AEnv.Irradiance, 16);
     GenRadianceFromCube(cube, AEnv.Radiance, 128);
+    Main.States.Blending[0] := oldBlendState;
   finally
     FreeAndNil(cube);
   end;
+end;
+
+procedure TbCubeUtils.InvalidateShaders;
+begin
+  if FProgram_Irradiance <> nil then
+    FProgram_Irradiance.Invalidate;
+  if FProgram_Radiance <> nil then
+    FProgram_Radiance.Invalidate;
+  if FProgram_LUT <> nil then
+    FProgram_LUT.Invalidate;
 end;
 
 procedure TbCubeUtils.AfterConstruction;
