@@ -1053,7 +1053,7 @@ begin
 
   Main.States.DepthWrite := True;
 
-  FPostProcess.DoComposeOnly(FGBufferForLightPass, FEmissionFBO);
+  FPostProcess.DoComposeOnly(FGBufferForLightPass, FEmissionFBO, FST_Depth);
   FPostProcess.ResultFBO.BlitToWindow();
 end;
 

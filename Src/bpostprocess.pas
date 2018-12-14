@@ -33,7 +33,7 @@ type
   public
     procedure InvalidateShaders;
 
-    procedure DoComposeOnly(AGbuffer: TavFrameBuffer; AEmissionBuffer: TavFrameBuffer);
+    procedure DoComposeOnly(AGbuffer: TavFrameBuffer; AEmissionBuffer: TavFrameBuffer; ADepth: TavTexture);
     procedure DoPostProcess(AGbuffer: TavFrameBuffer);
 
     property Result0: TavTextureBase read GetResult0;
@@ -123,7 +123,7 @@ begin
 end;
 
 procedure TavPostProcess.DoComposeOnly(AGbuffer: TavFrameBuffer;
-  AEmissionBuffer: TavFrameBuffer);
+  AEmissionBuffer: TavFrameBuffer; ADepth: TavTexture);
 var blurstep: Single;
     emitsize: TVec2i;
 begin
@@ -167,7 +167,10 @@ begin
 
   FStupidComposeProgram.Select();
   FStupidComposeProgram.SetUniform('Color', AGbuffer.GetColor(0), Sampler_NoFilter);
+  FStupidComposeProgram.SetUniform('Depth', ADepth, Sampler_NoFilter);
   FStupidComposeProgram.SetUniform('Emission', FTempFBO16f_2.GetColor(0), Sampler_Linear_NoAnisotropy);
+  FStupidComposeProgram.SetUniform('EyePos', Main.Camera.Eye);
+  FStupidComposeProgram.SetUniform('EyeDir', normalize(Main.Camera.At - Main.Camera.Eye));
 
   FStupidComposeProgram.Draw(ptTriangleStrip, cmNone, False, 0, 0, 4);
 end;
