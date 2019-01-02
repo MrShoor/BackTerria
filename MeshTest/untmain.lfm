@@ -1,0 +1,18 @@
+object frmMain: TfrmMain
+  Left = 378
+  Height = 783
+  Top = 178
+  Width = 1062
+  Caption = 'frmMain'
+  DoubleBuffered = False
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
+  OnPaint = FormPaint
+  ParentDoubleBuffered = False
+  LCLVersion = '2.0.0.2'
+  object ApplicationProperties1: TApplicationProperties
+    OnIdle = ApplicationProperties1Idle
+    left = 679
+    top = 210
+  end
+end
