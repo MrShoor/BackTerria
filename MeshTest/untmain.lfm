@@ -1,7 +1,7 @@
 object frmMain: TfrmMain
-  Left = 378
+  Left = 379
   Height = 783
-  Top = 178
+  Top = 179
   Width = 1062
   Caption = 'frmMain'
   DoubleBuffered = False

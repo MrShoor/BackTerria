@@ -124,9 +124,11 @@ begin
     FFBO.Clear(0, Black);
     FFBO.ClearDS(0);
 
+    FModelCollection.SubmitBufferClear();
+    FModelCollection.SubmitToDraw(FModel);
+
     FProgram.Select();
-    FModelCollection.Select;
-    FModelCollection.Draw(FModel);
+    FModelCollection.Draw();
 
     FFBO.BlitToWindow();
     FMain.Present;

@@ -9,7 +9,7 @@ interface
 
 uses
   Classes, SysUtils, bMesh,
-  avTypes, avBase, avTess, avRes, avContnrs,
+  avTypes, avBase, avTess, avRes, avContnrs, avContnrsDefaults,
   mutils;
 
 const
@@ -23,8 +23,13 @@ type
   end;
 
   IbModelInstance = interface
-    procedure GetHandles(out vert: IVBManagedHandle; out ind: IIBManagedHandle; out bones: IVBManagedHandle);
+    procedure GetModelHandles(out vert     : IVBManagedHandle;
+                              out ind      : IIBManagedHandle);
+    procedure GetBonesOffset(out ABonesOffset: Integer);
+    procedure GetMaterialsOffset(out AMaterialsOffset: Integer);
+
     function Bones: IBones;
+    function TexSize: TVec2i;
     function MeshInstnace: IbMeshInstance;
 
     procedure InvalidateBonesData;
@@ -48,6 +53,19 @@ type
 
   TbModelColleciton = class(TavMainRenderChild)
   private type
+    TMapIndices = array [TbMeshMaterialTextureKind] of Integer;
+
+    TMaterialVertex = packed record
+      Diff: TVec4;
+      Spec: TVec4;
+      Hardness_IOR_EmitFactor: TVec4;
+      map: array [TbMeshMaterialTextureKind] of TVec2;
+      procedure Init(const AMaterial: IbMeshMaterial; const AMapIndices: TMapIndices);
+      class function Layout: IDataLayout; static;
+    end;
+    IMaterialVertexArr = {$IfDef FPC}specialize{$EndIf} IArray<TMaterialVertex>;
+    TMaterialVertexArr = {$IfDef FPC}specialize{$EndIf} TVerticesRec<TMaterialVertex>;
+
     TBones = class (TInterfacedObject, IBones)
     private
       FMatrices: TMat4Arr;
@@ -61,6 +79,7 @@ type
 
     IbModel = interface
       procedure GetHandles(out vert: IVBManagedHandle; out ind: IIBManagedHandle);
+      procedure GetMaterialsOffset(out AMaterialsOffset: Integer);
     end;
 
     TbModel = class(TInterfacedObject, IbModel)
@@ -69,16 +88,23 @@ type
       FMesh : IbMesh;
       FVert : IVBManagedHandle;
       FInd  : IIBManagedHandle;
+
+      FMaterials: ISBManagedHandle;
+
+      FMaps : IMTManagedHandleArr;
       procedure GetHandles(out vert: IVBManagedHandle; out ind: IIBManagedHandle);
+      procedure GetMaterialsOffset(out AMaterialsOffset: Integer);
     public
       procedure Detach;
       constructor Create(AOwner: TbModelColleciton; const AMesh: IbMesh);
       destructor Destroy; override;
     end;
-    IbModelArr = {$IfDef FPC}specialize{$EndIf} IArray<TbModel>;
-    TbModelArr = {$IfDef FPC}specialize{$EndIf} TArray<TbModel>;
+    IbModelObjArr = {$IfDef FPC}specialize{$EndIf} IArray<TbModel>;
+    TbModelObjArr = {$IfDef FPC}specialize{$EndIf} TArray<TbModel>;
     IbMeshToModelObjMap = {$IfDef FPC}specialize{$EndIf} IHashMap<IbMesh, TbModel>;
     TbMeshToModelObjMap = {$IfDef FPC}specialize{$EndIf} THashMap<IbMesh, TbModel>;
+
+    { TbModelInstance }
 
     TbModelInstance = class(TInterfacedObject, IbModelInstance)
     private
@@ -86,12 +112,18 @@ type
       FIdx  : Integer;
 
       FMeshInstance: IbMeshInstance;
-      FModel: TbModel;
+      FModel: IbModel;
+
+      FTexSize: TVec2i;
 
       FBns  : ISBManagedHandle;
       FBonesData: IBones;
-      procedure GetHandles(out vert: IVBManagedHandle; out ind: IIBManagedHandle; out bones: ISBManagedHandle);
+      procedure GetModelHandles(out vert: IVBManagedHandle; out ind: IIBManagedHandle);
+      procedure GetBonesOffset(out ABonesOffset: Integer);
+      procedure GetMaterialsOffset(out AMaterialsOffset: Integer);
+
       function Bones: IBones;
+      function TexSize: TVec2i;
       function MeshInstnace: IbMeshInstance;
 
       procedure InvalidateBonesData;
@@ -105,28 +137,54 @@ type
 
     TModelInstanceVertex = packed record
       BoneOffset: Integer;
+      MaterialOffset: Integer;
       class function Layout: IDataLayout; static;
     end;
     IModelInstanceVertexArr = {$IfDef FPC}specialize{$EndIf} IArray<TModelInstanceVertex>;
     TModelInstanceVertexArr = {$IfDef FPC}specialize{$EndIf} TVerticesRec<TModelInstanceVertex>;
 
+    IMultiTextureMap = {$IfDef FPC}specialize{$EndIf} IHashMap<TVec2i, TavMultiTexture>;
+    TMultiTextureMap = {$IfDef FPC}specialize{$EndIf} THashMap<TVec2i, TavMultiTexture>;
+
+    TDrawComparer = class (TInterfacedObject, IComparer)
+    private
+      function Compare(const Left, Right): Integer;
+    end;
+
+    TDrawChunk = record
+      TexSize : TVec2i;
+      InstanceOffset: Integer;
+      InstanceCount : Integer;
+    end;
+    IDrawChunkArr = {$IfDef FPC}specialize{$EndIf} IArray<TDrawChunk>;
+    TDrawChunkArr = {$IfDef FPC}specialize{$EndIf} TArray<TDrawChunk>;
   private
     FMeshToModelMap: IbMeshToModelObjMap;
     FModelInstances: IbModelInstanceObjArr;
 
-    FVerts: TavVBManaged;
-    FInds : TavIBManaged;
-    FBones: TavSBManaged;
+    FVerts    : TavVBManaged;
+    FInds     : TavIBManaged;
+    FBones    : TavSBManaged;
+    FMaterials: TavSBManaged;
 
     FInstBufferData: IModelInstanceVertexArr;
     FInstBuffer: TavSB;
 
+    FMaps: IMultiTextureMap;
+
+    FToDraw: IbModelArr;
+    FDrawComparer: IComparer;
+    FDrawChunks: IDrawChunkArr;
+
     function ObtainModel(const AMesh: IbMesh): TbModel;
+    function ObtainMultiTexture(const ASize: TVec2i): TavMultiTexture;
   public
     function CreateModel(const AMeshInstance: IbMeshInstance): IbModelInstance;
 
-    procedure Select;
-    procedure Draw(const AModel: IbModelInstance);
+    procedure SubmitBufferClear();
+    procedure SubmitToDraw(const AModel: IbModelInstance); overload;
+    procedure SubmitToDraw(const AModelArr: IbModelArr); overload;
+    procedure Draw();
 
     constructor Create(AOwner: TavObject); override;
     destructor Destroy; override;
@@ -172,8 +230,8 @@ type
 
     FAnimIdx: IAnimIndices;
 
-    function TimeToFrameFloat(const AAnim: IbArmatureAnimation; const ATimeFromStart: Int64): Single;
-    function TimeToFrame(const AAnim: IbArmatureAnimation; const ATimeFromStart: Int64): Integer;
+    function TimeToFrameFloat(const ATimeFromStart: Int64): Single;
+    function TimeToFrame(const ATimeFromStart: Int64): Integer;
     procedure SetTime(const ATime: Int64; const AIncomingEvents: IAnimationEventArr = nil);
     procedure UpdateFrameState;
 
@@ -200,6 +258,76 @@ begin
   Result := TbAnimationController.Create(AModels);
 end;
 
+{ TbModelColleciton.TDrawComparer }
+
+function TbModelColleciton.TDrawComparer.Compare(const Left, Right): Integer;
+const cMaxTexWidth = 1024 * 1024;
+var L: IbModelInstance absolute Left;
+    R: IbModelInstance absolute Right;
+    ResultNative: NativeInt;
+    lSize, rSize: TVec2i;
+begin
+  lSize := L.TexSize;
+  rSize := R.TexSize;
+  Result := (lSize.y * cMaxTexWidth + lSize.x) - (rSize.y * cMaxTexWidth + rSize.x);
+  if Result = 0 then
+  begin
+    ResultNative := NativeInt(L.MeshInstnace.Mesh) - NativeInt(R.MeshInstnace.Mesh);
+    if ResultNative = 0 then
+    begin
+      ResultNative := NativeInt(L) - NativeInt(R);
+      Result := Sign(ResultNative);
+    end
+    else
+      Result := Sign(ResultNative);
+  end;
+end;
+
+{ TbModelColleciton.TMaterialVertex }
+
+procedure TbModelColleciton.TMaterialVertex.Init(const AMaterial: IbMeshMaterial; const AMapIndices: TMapIndices);
+var
+  mInfo: PbMeshMaterialInfo;
+  tk: TbMeshMaterialTextureKind;
+begin
+  mInfo := AMaterial.matInfo;
+  Diff := mInfo^.matDiff;
+  Spec := mInfo^.matSpec;
+  Hardness_IOR_EmitFactor := Vec(mInfo^.matSpecHardness, mInfo^.matSpecIOR, mInfo^.matEmitFactor, 0);
+  for tk := Low(TbMeshMaterialTextureKind) to High(TbMeshMaterialTextureKind) do
+  begin
+    if AMapIndices[tk] < 0 then
+      map[tk] := Vec(0, 0)
+    else
+    begin
+      map[tk].x := AMapIndices[tk];
+      map[tk].y := mInfo^.Textures[tk].factor;
+    end;
+  end;
+end;
+
+class function TbModelColleciton.TMaterialVertex.Layout: IDataLayout;
+begin
+  Result := LB.Add('Diff', ctFloat, 4)
+              .Add('Spec', ctFloat, 4)
+              .Add('Hardness_IOR_EmitFactor', ctFloat, 4)
+              .Add('mapDiffuse_Intensity', ctFloat, 2)
+              .Add('mapDiffuse_Color', ctFloat, 2)
+              .Add('mapDiffuse_Alpha', ctFloat, 2)
+              .Add('mapDiffuse_Translucency', ctFloat, 2)
+              .Add('mapShading_Ambient', ctFloat, 2)
+              .Add('mapShading_Emit', ctFloat, 2)
+              .Add('mapShading_Mirror', ctFloat, 2)
+              .Add('mapShading_RayMirror', ctFloat, 2)
+              .Add('mapSpecular_Intensity', ctFloat, 2)
+              .Add('mapSpecular_Color', ctFloat, 2)
+              .Add('mapSpecular_Hardness', ctFloat, 2)
+              .Add('mapGeometry_Normal', ctFloat, 2)
+              .Add('mapGeometry_Warp', ctFloat, 2)
+              .Add('mapGeometry_Displace', ctFloat, 2)
+              .Finish();
+end;
+
 { TbModelColleciton.TbModel }
 
 procedure TbModelColleciton.TbModel.GetHandles(out vert: IVBManagedHandle; out
@@ -209,22 +337,78 @@ begin
   ind := FInd;
 end;
 
+procedure TbModelColleciton.TbModel.GetMaterialsOffset(out AMaterialsOffset: Integer);
+begin
+  AMaterialsOffset := FMaterials.Offset;
+end;
+
 procedure TbModelColleciton.TbModel.Detach;
 begin
   if FOwner = nil then Exit;
   FVert := nil;
   FInd := nil;
+  FMaterials := nil;
+  FMaps := nil;
   FOwner.FMeshToModelMap.Delete(FMesh);
   FOwner := nil;
 end;
 
 constructor TbModelColleciton.TbModel.Create(AOwner: TbModelColleciton; const AMesh: IbMesh);
+var materialsData: IMaterialVertexArr;
+    matv: TMaterialVertex;
+    material: IbMeshMaterial;
+    mapIndices: TMapIndices;
+    tex: TavMultiTexture;
+    texData: ITextureData;
+    i: Integer;
+    tk: TbMeshMaterialTextureKind;
 begin
   FOwner := AOwner;
   FMesh := AMesh;
   FOwner.FMeshToModelMap.Add(FMesh, Self);
   FVert := AOwner.FVerts.Add(FMesh.Vert as IVerticesData);
   FInd := AOwner.FInds.Add(FMesh.Ind);
+
+  FMaps := nil;
+  materialsData := TMaterialVertexArr.Create();
+  if FMesh.GetMaterialsCount() > 0 then
+  begin
+    tex := FOwner.ObtainMultiTexture(FMesh.TexturesSize());
+    if tex <> nil then
+      FMaps := TMTManagedHandleArr.Create();
+
+    materialsData.Capacity := FMesh.GetMaterialsCount();
+    for i := 0 to FMesh.GetMaterialsCount() - 1 do
+    begin
+      for tk := Low(TbMeshMaterialTextureKind) to High(TbMeshMaterialTextureKind) do mapIndices[tk] := -1;
+      material := FMesh.GetMaterial(i);
+      if tex <> nil then
+      begin
+        for tk := Low(TbMeshMaterialTextureKind) to High(TbMeshMaterialTextureKind) do
+        begin
+          texData := material.TexData(tk);
+          if texData <> nil then
+          begin
+            FMaps.Add(tex.Add(texData));
+            mapIndices[tk] := FMaps.Last.Offset;
+          end;
+        end;
+      end;
+      matv.Init(material, mapIndices);
+      materialsData.Add(matv);
+    end;
+  end
+  else
+  begin
+    materialsData.Capacity := 1;
+    ZeroClear(matv, SizeOf(matv));
+    matv.Diff := Vec(1,1,1,1);
+    matv.Hardness_IOR_EmitFactor := Vec(0.5, 0.5, 0, 0);
+    matv.Spec := Vec(1,1,1,1);
+    materialsData.Add(matv);
+  end;
+
+  FMaterials := FOwner.FMaterials.Add(materialsData as IVerticesData);
 end;
 
 destructor TbModelColleciton.TbModel.Destroy;
@@ -235,14 +419,14 @@ end;
 
 { TbAnimationController }
 
-function TbAnimationController.TimeToFrameFloat(const AAnim: IbArmatureAnimation; const ATimeFromStart: Int64): Single;
+function TbAnimationController.TimeToFrameFloat(const ATimeFromStart: Int64): Single;
 begin
   Result := ATimeFromStart / KeyFrameDuration;
 end;
 
-function TbAnimationController.TimeToFrame(const AAnim: IbArmatureAnimation; const ATimeFromStart: Int64): Integer;
+function TbAnimationController.TimeToFrame(const ATimeFromStart: Int64): Integer;
 begin
-  Result := Floor(TimeToFrameFloat(AAnim, ATimeFromStart));
+  Result := Floor(TimeToFrameFloat(ATimeFromStart));
 end;
 
 procedure TbAnimationController.SetTime(const ATime: Int64; const AIncomingEvents: IAnimationEventArr);
@@ -261,7 +445,7 @@ procedure TbAnimationController.SetTime(const ATime: Int64; const AIncomingEvent
           if ps.Stop > AOldTime then
           begin
             anim := FArmature.GetAnimation(ps.AnimIndex);
-            anim.ProcessMarkers(TimeToFrame(anim, max(AOldTime - ps.Start, 0)), TimeToFrame(anim, ANewTime - ps.Start), AIncomingEvents);
+            anim.ProcessMarkers(TimeToFrame(max(AOldTime - ps.Start, 0)), TimeToFrame(ANewTime - ps.Start), AIncomingEvents);
           end;
         if not ps.KeepAtLastFrame then
           FPlayState.DeleteWithSwap(i);
@@ -273,7 +457,7 @@ procedure TbAnimationController.SetTime(const ATime: Int64; const AIncomingEvent
           if ps.Start < ANewTime then
           begin
             anim := FArmature.GetAnimation(ps.AnimIndex);
-            anim.ProcessMarkers(TimeToFrame(anim, max(AOldTime - ps.Start, 0)), TimeToFrame(anim, ANewTime - ps.Start), AIncomingEvents);
+            anim.ProcessMarkers(TimeToFrame(max(AOldTime - ps.Start, 0)), TimeToFrame(ANewTime - ps.Start), AIncomingEvents);
           end;
       end;
     end;
@@ -320,7 +504,7 @@ begin
       FFrameState[i].frameIdx := animRange.y - 1
     else
     begin
-      FFrameState[i].frameIdx := frac( TimeToFrameFloat(anim, max(FTime - ps.Start, 0)) / animRange.y) * animRange.y;
+      FFrameState[i].frameIdx := frac( TimeToFrameFloat(max(FTime - ps.Start, 0)) / animRange.y) * animRange.y;
     end;
 
     if ps.FadeSpeed = 0 then
@@ -447,20 +631,36 @@ end;
 
 class function TbModelColleciton.TModelInstanceVertex.Layout: IDataLayout;
 begin
-  Result := LB.Add('BoneOffset', ctInt, 1).Finish();
+  Result := LB.Add('BoneOffset', ctInt, 1)
+              .Add('MaterialOffset', ctInt, 1)
+              .Finish();
 end;
 
 { TbModelColleciton.TbModelInstance }
 
-procedure TbModelColleciton.TbModelInstance.GetHandles(out vert: IVBManagedHandle; out ind: IIBManagedHandle; out bones: ISBManagedHandle);
+procedure TbModelColleciton.TbModelInstance.GetModelHandles(out vert: IVBManagedHandle; out ind: IIBManagedHandle);
 begin
   FModel.GetHandles(vert, ind);
-  bones := FBns;
+end;
+
+procedure TbModelColleciton.TbModelInstance.GetBonesOffset(out ABonesOffset: Integer);
+begin
+  ABonesOffset := FBns.Offset;
+end;
+
+procedure TbModelColleciton.TbModelInstance.GetMaterialsOffset(out AMaterialsOffset: Integer);
+begin
+  FModel.GetMaterialsOffset(AMaterialsOffset);
 end;
 
 function TbModelColleciton.TbModelInstance.Bones: IBones;
 begin
   Result := FBonesData;
+end;
+
+function TbModelColleciton.TbModelInstance.TexSize: TVec2i;
+begin
+  Result := FTexSize;
 end;
 
 function TbModelColleciton.TbModelInstance.MeshInstnace: IbMeshInstance;
@@ -494,6 +694,7 @@ begin
   FModel := FOwner.ObtainModel(AMeshInstance.Mesh);
   FBonesData := TBones.Create(AMeshInstance.TransformCount);
   FBns := AOwner.FBones.Add(FBonesData);
+  FTexSize := AMeshInstance.Mesh.TexturesSize;
 end;
 
 destructor TbModelColleciton.TbModelInstance.Destroy;
@@ -549,36 +750,117 @@ begin
   end;
 end;
 
+function TbModelColleciton.ObtainMultiTexture(const ASize: TVec2i): TavMultiTexture;
+begin
+  if (ASize.x <= 0) or (ASize.y <= 0) then Exit(nil);
+  if not FMaps.TryGetValue(ASize, Result) then
+  begin
+    Result := TavMultiTexture.Create(Self);
+    Result.TargetFormat := TTextureFormat.RGBA;
+    FMaps.AddOrSet(ASize, Result);
+  end;
+end;
+
 function TbModelColleciton.CreateModel(const AMeshInstance: IbMeshInstance): IbModelInstance;
 begin
   Result := TbModelInstance.Create(Self, AMeshInstance);
 end;
 
-procedure TbModelColleciton.Select;
+procedure TbModelColleciton.SubmitBufferClear();
 begin
-  Main.ActiveProgram.SetAttributes(FVerts, FInds, nil);
+  FToDraw.Clear();
 end;
 
-procedure TbModelColleciton.Draw(const AModel: IbModelInstance);
+procedure TbModelColleciton.SubmitToDraw(const AModel: IbModelInstance);
+begin
+  FToDraw.Add(AModel);
+end;
+
+procedure TbModelColleciton.SubmitToDraw(const AModelArr: IbModelArr);
+begin
+  FToDraw.AddArray(AModelArr);
+end;
+
+procedure TbModelColleciton.Draw();
+
+  procedure PrepareDrawChunks;
+  var model: IbModelInstance;
+      mesh, lastMesh : IbMesh;
+      i: Integer;
+      drawChunk: TDrawChunk;
+  begin
+    FDrawChunks.Clear();
+    drawChunk.InstanceCount := 0;
+    lastMesh := nil;
+    for i := 0 to FToDraw.Count - 1 do
+    begin
+      model := FToDraw[i];
+      mesh := model.MeshInstnace.Mesh;
+      if drawChunk.InstanceCount <> 0 then
+      begin
+        if (drawChunk.TexSize <> model.TexSize) or
+           (lastMesh <> mesh) then
+        begin
+          FDrawChunks.Add(drawChunk);
+          drawChunk.InstanceCount := 0;
+        end;
+      end;
+      lastMesh := mesh;
+
+      if drawChunk.InstanceCount = 0 then
+      begin
+        drawChunk.TexSize := model.TexSize;
+        drawChunk.InstanceOffset := i;
+      end;
+      Inc(drawChunk.InstanceCount);
+    end;
+    if drawChunk.InstanceCount <> 0 then
+      FDrawChunks.Add(drawChunk);
+  end;
+
 var vh: IVBManagedHandle;
     ih: IIBManagedHandle;
-    bh: IVBManagedHandle;
-
     inst_vertex: TModelInstanceVertex;
+    drawchunk: TDrawChunk;
+    i, j: Integer;
+    lastTexSize: TVec2i;
 begin
-  AModel.GetHandles(vh, ih, bh);
+  if FToDraw.Count = 0 then Exit;
+  //prepare batches
+  FToDraw.Sort(FDrawComparer);
+  PrepareDrawChunks();
 
-  inst_vertex.BoneOffset := bh.Offset;
-
+  //prepare instance buffer
   FInstBufferData.Clear();
-  FInstBufferData.Add(inst_vertex);
   FInstBuffer.Invalidate;
+  for i := 0 to FDrawChunks.Count - 1 do
+  begin
+    drawchunk := FDrawChunks[i];
+    FToDraw[drawchunk.InstanceOffset].GetMaterialsOffset(inst_vertex.MaterialOffset);
+    for j := 0 to drawchunk.InstanceCount - 1 do
+    begin
+      FToDraw[drawchunk.InstanceOffset + j].GetBonesOffset(inst_vertex.BoneOffset);
+      FInstBufferData.Add(inst_vertex);
+    end;
+  end;
 
-  Main.ActiveProgram.SetUniform('Bones', FBones);
+  //draw
+  Main.ActiveProgram.SetAttributes(FVerts, FInds, nil);
   Main.ActiveProgram.SetUniform('Instances', FInstBuffer);
-
-  Main.ActiveProgram.Draw(ptTriangles, cmNone, True, 1, ih.Offset, ih.Size, vh.Offset, 0);
-  //DrawManaged(Main.ActiveProgram, vh, ih, nil);
+  Main.ActiveProgram.SetUniform('Bones', FBones);
+  Main.ActiveProgram.SetUniform('Materials', FMaterials);
+  lastTexSize := Vec(0, 0);
+  for i := 0 to FDrawChunks.Count - 1 do
+  begin
+    drawchunk := FDrawChunks[i];
+    if drawchunk.TexSize <> lastTexSize then
+    begin
+      Main.ActiveProgram.SetUniform('Maps', ObtainMultiTexture(drawchunk.TexSize), Sampler_Linear);
+      lastTexSize := drawchunk.TexSize;
+    end;
+    FToDraw[drawchunk.InstanceOffset].GetModelHandles(vh, ih);
+    Main.ActiveProgram.Draw(ptTriangles, cmNone, True, drawchunk.InstanceCount, ih.Offset, ih.Size, vh.Offset, drawchunk.InstanceOffset);
+  end;
 end;
 
 constructor TbModelColleciton.Create(AOwner: TavObject);
@@ -587,26 +869,32 @@ begin
   FModelInstances := TbModelInstanceObjArr.Create();
   FMeshToModelMap := TbMeshToModelObjMap.Create();
 
-  FVerts := TavVBManaged.Create(Self);
-  FInds  := TavIBManaged.Create(Self);
-  FBones := TavSBManaged.Create(Self);
+  FVerts     := TavVBManaged.Create(Self);
+  FInds      := TavIBManaged.Create(Self);
+  FBones     := TavSBManaged.Create(Self);
+  FMaterials := TavSBManaged.Create(Self);
+  FMaps      := TMultiTextureMap.Create();
 
   FInstBufferData := TModelInstanceVertexArr.Create();
   FInstBuffer := TavSB.Create(Self);
   FInstBuffer.Vertices := FInstBufferData as IVerticesData;
 
   FInds.PrimType := ptTriangles;
+
+  FToDraw := TbModelArr.Create;
+  FDrawComparer := TDrawComparer.Create;
+  FDrawChunks := TDrawChunkArr.Create;
 end;
 
 destructor TbModelColleciton.Destroy;
 var i: Integer;
-    models: IbModelArr;
+    models: IbModelObjArr;
     m: TbModel;
 begin
   for i := FModelInstances.Count - 1 downto 0 do
     FModelInstances[i].Detach;
 
-  models := TbModelArr.Create();
+  models := TbModelObjArr.Create();
   models.Capacity := FMeshToModelMap.Count;
   FMeshToModelMap.Reset;
   while FMeshToModelMap.NextValue(m) do

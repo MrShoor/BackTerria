@@ -8,9 +8,50 @@ unit bMesh;
 interface
 
 uses
-  Classes, SysUtils, mutils, avTess, avTypes, avContnrs;
+  Classes, SysUtils, mutils, avTess, avTypes, avContnrs, avTexLoader;
 
 type
+  TbMeshMaterialTextureKind = (tkDiffuse_Intensity,
+                               tkDiffuse_Color,
+                               tkDiffuse_Alpha,
+                               tkDiffuse_Translucency,
+                               tkShading_Ambient,
+                               tkShading_Emit,
+                               tkShading_Mirror,
+                               tkShading_RayMirror,
+                               tkSpecular_Intensity,
+                               tkSpecular_Color,
+                               tkSpecular_Hardness,
+                               tkGeometry_Normal,
+                               tkGeometry_Warp,
+                               tkGeometry_Displace);
+
+  TbMeshMaterialTextureInfo = record
+    filename: string;
+    factor  : Single;
+  end;
+
+  { TbMeshMaterialInfo }
+
+  TbMeshMaterialInfo = record
+    matDiff        : TVec4;
+    matSpec        : TVec4;
+    matSpecHardness: Single;
+    matSpecIOR     : Single;
+    matEmitFactor  : Single;
+    Textures: array [TbMeshMaterialTextureKind] of TbMeshMaterialTextureInfo;
+    procedure ReadFromStream(const AStream : TStream);
+  end;
+  PbMeshMaterialInfo = ^TbMeshMaterialInfo;
+  TbMeshMaterialInfoArray = array of TbMeshMaterialInfo;
+
+  IbMeshMaterial = interface
+    function matInfo : PbMeshMaterialInfo;
+    function TexSize : TVec2i;
+    function MipCount: Integer;
+    function TexData(const ATexKind: TbMeshMaterialTextureKind): ITextureData;
+  end;
+
   TMeshVert = packed record
     vsCoord : TVec3;
     vsNormal: TVec3;
@@ -74,6 +115,10 @@ type
     function GetBlendShapes : IBlendShapeArr;
     function GetVertexGroups: IVertexGroupArr;
     function FindVertexGroup(const AName: string): Integer;
+
+    function GetMaterialsCount(): Integer;
+    function GetMaterial(AIndex: Integer): IbMeshMaterial;
+    function TexturesSize: TVec2i;
 
     procedure ApplyMorphFrame(AIndex: Integer);
     procedure ApplyMorphFrameLerp(AFrame: Single);
@@ -162,8 +207,8 @@ type
     MeshInstances: IbMeshInstanceArr;
   end;
 
-function bMesh_LoadFromStream(AStream: TStream): TImportResult;
-function bMesh_LoadFromFile(const AFileName: string): TImportResult;
+function bMesh_LoadFromStream(AStream: TStream; const ATexMan: ITextureManager = nil): TImportResult;
+function bMesh_LoadFromFile(const AFileName: string; const ATexMan: ITextureManager = nil): TImportResult;
 
 implementation
 
@@ -176,6 +221,22 @@ type
   { TbMesh }
 
   TbMesh = class(TInterfacedObject, IbMesh)
+  private type
+
+    TbMaterial = class(TInterfacedObject, IbMeshMaterial)
+    private
+      FMat     : TbMeshMaterialInfo;
+      FImages  : array [TbMeshMaterialTextureKind] of ITextureData;
+      FTexSize : TVec2i;
+      FMipCount: Integer;
+      function matInfo : PbMeshMaterialInfo;
+      function TexSize : TVec2i;
+      function MipCount: Integer;
+      function TexData(const ATexKind: TbMeshMaterialTextureKind): ITextureData;
+    public
+      constructor Create(const AMaterialInfo: TbMeshMaterialInfo; const ATexMan: ITextureManager; ATexWidth, ATexHeight: Integer);
+    end;
+
   private
     FName : string;
     FVerts: IMeshVertArr;
@@ -184,6 +245,9 @@ type
     FBlendShapes : IBlendShapeArr;
     FVertGroupArr: IVertexGroupArr;
     FVertGroupMap: IVertexGroupMap;
+
+    FTexSize: TVec2i;
+    FMaterials: array of IbMeshMaterial;
   private
     function GetName : string;
     function GetVert : IMeshVertArr;
@@ -194,10 +258,14 @@ type
     function GetVertexGroups: IVertexGroupArr;
     function FindVertexGroup(const AName: string): Integer;
 
+    function GetMaterialsCount(): Integer;
+    function GetMaterial(AIndex: Integer): IbMeshMaterial;
+    function TexturesSize: TVec2i;
+
     procedure ApplyMorphFrame(AIndex: Integer);
     procedure ApplyMorphFrameLerp(AFrame: Single);
   public
-    constructor Create(AStream: TStream);
+    constructor Create(AStream: TStream; const AMaterials: TbMeshMaterialInfoArray; const ATexMan: ITextureManager);
   end;
 
   { TbArmature }
@@ -284,10 +352,12 @@ type
     constructor Create(AStream: TStream; const AMeshes: IbMeshArr; const AArms: IbArmatureArr);
   end;
 
-function bMesh_LoadFromStream(AStream: TStream): TImportResult;
-var arm_count, mesh_count, inst_count: Integer;
+function bMesh_LoadFromStream(AStream: TStream; const ATexMan: ITextureManager): TImportResult;
+var arm_count, mesh_count, inst_count, mat_count: Integer;
+    materials: TbMeshMaterialInfoArray;
     i: Integer;
 begin
+  mat_count := 0;
   arm_count := 0;
   mesh_count := 0;
   inst_count := 0;
@@ -296,27 +366,102 @@ begin
   Result.Meshes := TbMeshArr.Create();
   Result.MeshInstances := TbMeshInstanceArr.Create();
 
+  AStream.ReadBuffer(mat_count, SizeOf(mat_count));
+  SetLength(materials, mat_count);
+  for i := 0 to mat_count - 1 do
+    materials[i].ReadFromStream(AStream);
+
   AStream.ReadBuffer(arm_count, SizeOf(arm_count));
   for i := 0 to arm_count - 1 do
     Result.Armatures.Add(TbArmature.Create(AStream));
 
   AStream.ReadBuffer(mesh_count, SizeOf(mesh_count));
   for i := 0 to mesh_count - 1 do
-    Result.Meshes.Add(TbMesh.Create(AStream));
+    Result.Meshes.Add(TbMesh.Create(AStream, materials, ATexMan));
 
   AStream.ReadBuffer(inst_count, SizeOf(inst_count));
   for i := 0 to inst_count - 1 do
     Result.MeshInstances.Add(TbMeshInstance.Create(AStream, Result.Meshes, Result.Armatures));
 end;
 
-function bMesh_LoadFromFile(const AFileName: string): TImportResult;
+function bMesh_LoadFromFile(const AFileName: string; const ATexMan: ITextureManager): TImportResult;
 var fs: TFileStream;
+    oldDir: string;
 begin
+  oldDir := GetCurrentDir;
   fs := TFileStream.Create(AFileName, fmOpenRead);
+  SetCurrentDir(ExtractFileDir(ExpandFileName(AFileName)));
   try
-    Result := bMesh_LoadFromStream(fs);
+    Result := bMesh_LoadFromStream(fs, ATexMan);
   finally
     FreeAndNil(fs);
+    SetCurrentDir(oldDir);
+  end;
+end;
+
+{ TbMesh.TbMaterial }
+
+function TbMesh.TbMaterial.matInfo: PbMeshMaterialInfo;
+begin
+  Result := @FMat;
+end;
+
+function TbMesh.TbMaterial.TexSize: TVec2i;
+begin
+  Result := FTexSize;
+end;
+
+function TbMesh.TbMaterial.MipCount: Integer;
+begin
+  Result := FMipCount;
+end;
+
+function TbMesh.TbMaterial.TexData(const ATexKind: TbMeshMaterialTextureKind): ITextureData;
+begin
+  Result := FImages[ATexKind];
+end;
+
+constructor TbMesh.TbMaterial.Create(const AMaterialInfo: TbMeshMaterialInfo; const ATexMan: ITextureManager; ATexWidth, ATexHeight: Integer);
+var tk: TbMeshMaterialTextureKind;
+begin
+  FMat := AMaterialInfo;
+  FTexSize.x := ATexWidth;
+  FTexSize.y := ATexHeight;
+  FMipCount := 0;
+  for tk := Low(TbMeshMaterialTextureKind) to High(TbMeshMaterialTextureKind) do
+    if AMaterialInfo.Textures[tk].filename <> '' then
+    begin
+      if ATexMan <> nil then
+        FImages[tk] := ATexMan.LoadTexture(AMaterialInfo.Textures[tk].filename, FTexSize.x, FTexSize.y, TImageFormat.A8R8G8B8)
+      else
+        FImages[tk] := LoadTexture(AMaterialInfo.Textures[tk].filename, FTexSize.x, FTexSize.y, TImageFormat.A8R8G8B8);
+      FTexSize.x := FImages[tk].Width;
+      FTexSize.y := FImages[tk].Height;
+      FMipCount := FImages[tk].MipsCount;
+    end
+    else
+    begin
+      FImages[tk] := nil;
+    end;
+end;
+
+{ TbMeshMaterialInfo }
+
+procedure TbMeshMaterialInfo.ReadFromStream(const AStream: TStream);
+var
+  tk: TbMeshMaterialTextureKind;
+begin
+  AStream.ReadBuffer(matDiff, SizeOf(matDiff));
+  AStream.ReadBuffer(matSpec, SizeOf(matSpec));
+  AStream.ReadBuffer(matSpecHardness, SizeOf(matSpecHardness));
+  AStream.ReadBuffer(matSpecIOR, SizeOf(matSpecIOR));
+  AStream.ReadBuffer(matEmitFactor, SizeOf(matEmitFactor));
+  for tk := Low(TbMeshMaterialTextureKind) to High(TbMeshMaterialTextureKind) do
+  begin
+    StreamReadString(AStream, Textures[tk].filename);
+    if Textures[tk].filename <> '' then
+      Textures[tk].filename := ExpandFileName(Textures[tk].filename);
+    AStream.ReadBuffer(Textures[tk].factor, SizeOf(Textures[tk].factor));
   end;
 end;
 
@@ -747,7 +892,22 @@ begin
     Result := -1;
 end;
 
-constructor TbMesh.Create(AStream: TStream);
+function TbMesh.GetMaterialsCount(): Integer;
+begin
+  Result := Length(FMaterials);
+end;
+
+function TbMesh.GetMaterial(AIndex: Integer): IbMeshMaterial;
+begin
+  Result := FMaterials[AIndex];
+end;
+
+function TbMesh.TexturesSize: TVec2i;
+begin
+  Result := FTexSize;
+end;
+
+constructor TbMesh.Create(AStream: TStream; const AMaterials: TbMeshMaterialInfoArray; const ATexMan: ITextureManager);
 var vert_count, morph_count, ind_count, bshape_count, bshape_vert_count, vgroup_count: Integer;
     i, j: Integer;
     pMVert: PMeshVert;
@@ -757,7 +917,11 @@ var vert_count, morph_count, ind_count, bshape_count, bshape_vert_count, vgroup_
     pWIndex: PInteger;
     pWeight: PSingle;
     astr: AnsiString;
+    mat_count: Integer;
+    mat_idx: Integer;
 begin
+  mat_count := 0;
+  mat_idx := 0;
   vert_count := 0;
   morph_count := 0;
   ind_count := 0;
@@ -767,6 +931,18 @@ begin
   vgroup_count := 0;
 
   StreamReadString(AStream, FName);
+
+  FTexSize.x := SIZE_DEFAULT;
+  FTexSize.y := SIZE_DEFAULT;
+  AStream.ReadBuffer(mat_count, SizeOf(mat_count));
+  SetLength(FMaterials, mat_count);
+  for i := 0 to mat_count - 1 do
+  begin
+    AStream.ReadBuffer(mat_idx, SizeOf(mat_idx));
+    FMaterials[i] := TbMaterial.Create(AMaterials[mat_idx], ATexMan, FTexSize.x, FTexSize.y);
+    FTexSize := FMaterials[i].TexSize;
+  end;
+  if (FTexSize.x <= 0) or (FTexSize.y <= 0) then FTexSize := Vec(0,0);
 
   AStream.ReadBuffer(vert_count, SizeOf(vert_count));
   Assert(vert_count > 0);
