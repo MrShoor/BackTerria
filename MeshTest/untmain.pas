@@ -25,13 +25,16 @@ type
     FProgram: TavProgram;
 
     FModelCollection: TbModelColleciton;
-    FModel: IbModelInstance;
 
+    FModels: IbModelInstanceArr;
     FAnim : IbAnimationController;
 
     FImportRes: TImportResult;
+    FImportedMeshes: IbMeshInstanceNameMap;
 
     FEvents: IAnimationEventArr;
+
+    function FindMeshes(const ANames: array of string): IbMeshInstanceArr;
   public
     procedure RenderScene;
   end;
@@ -48,6 +51,19 @@ implementation
 const meshIdx = 1;
 
 procedure TfrmMain.FormCreate(Sender: TObject);
+
+  procedure ImportModel;
+  var
+    i: Integer;
+  begin
+    FImportRes := bMesh_LoadFromFile('D:\test\out.dat');
+    FImportRes.Meshes[meshIdx].ApplyMorphFrameLerp(2);
+
+    FImportedMeshes := TbMeshInstanceNameMap.Create();
+    for i := 0 to FImportRes.MeshInstances.Count - 1 do
+      FImportedMeshes.Add(FImportRes.MeshInstances[i].Name, FImportRes.MeshInstances[i]);
+  end;
+
 begin
   FMain := TavMainRender.Create(nil);
   FFBO := Create_FrameBuffer(FMain, [TTextureFormat.RGBA, TTextureFormat.D32f]);
@@ -59,13 +75,16 @@ begin
   FMain.Window := Handle;
   FMain.Init3D(apiDX11);
 
-  FImportRes := bMesh_LoadFromFile('D:\test\out.dat');
-  FImportRes.Meshes[meshIdx].ApplyMorphFrameLerp(2);
+  ImportModel;
 
-  FModel := FModelCollection.CreateModel(FImportRes.MeshInstances[1]);
-  FAnim := Create_bAnimationController(FModel);
+  //FModels := FModelCollection.CreateModels(FindMeshes(['arissa:Body_Geo', 'arissa:Cloak_Geo', 'arissa:Eyes', 'arissa:Skirt_Geo', 'arissa:Weapons_Geo']));
+  FModels := FModelCollection.CreateModels(FindMeshes(['Stick']));
+  FAnim := Create_bAnimationController(FModels);
   FAnim.SetTime(FMain.Time64);
-  FAnim.BoneAnimationSequence(['ArmatureAction'], True);
+  FModels.AddArray(FModelCollection.CreateModels(FindMeshes(['Cube'])));
+
+  //FAnim.BoneAnimationSequence(['Hunter_Raise0'], True);
+  FAnim.BoneAnimationSequence(['StickArmAction'], True);
   FEvents := TAnimationEventArr.Create();
 
   FMain.Projection.Fov := Pi*0.25;
@@ -99,10 +118,21 @@ begin
   RenderScene;
 end;
 
+function TfrmMain.FindMeshes(const ANames: array of string): IbMeshInstanceArr;
+var
+  i: Integer;
+begin
+  Result := TbMeshInstanceArr.Create();
+  for i := 0 to Length(ANames) - 1 do
+    Result.Add(FImportedMeshes[ANames[i]]);
+end;
+
 procedure TfrmMain.RenderScene;
 var
   i: Integer;
 begin
+  Caption := FormatFloat('0.00', Len(FMain.Camera.Eye));
+
   if FMain.Bind then
   try
     FEvents.Clear();
@@ -125,7 +155,7 @@ begin
     FFBO.ClearDS(0);
 
     FModelCollection.SubmitBufferClear();
-    FModelCollection.SubmitToDraw(FModel);
+    FModelCollection.SubmitToDraw(FModels);
 
     FProgram.Select();
     FModelCollection.Draw();

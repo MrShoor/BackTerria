@@ -9,7 +9,7 @@ object frmMain: TfrmMain
   OnDestroy = FormDestroy
   OnPaint = FormPaint
   ParentDoubleBuffered = False
-  LCLVersion = '2.0.0.2'
+  LCLVersion = '2.0.0.3'
   object ApplicationProperties1: TApplicationProperties
     OnIdle = ApplicationProperties1Idle
     left = 679

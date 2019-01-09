@@ -34,10 +34,10 @@ type
 
     procedure InvalidateBonesData;
   end;
-  IbModelArr = {$IfDef FPC}specialize{$EndIf} IArray<IbModelInstance>;
-  TbModelArr = {$IfDef FPC}specialize{$EndIf} TArray<IbModelInstance>;
-  IbModelSet = {$IfDef FPC}specialize{$EndIf} IHashSet<IbModelInstance>;
-  TbModelSet = {$IfDef FPC}specialize{$EndIf} THashSet<IbModelInstance>;
+  IbModelInstanceArr = {$IfDef FPC}specialize{$EndIf} IArray<IbModelInstance>;
+  TbModelInstanceArr = {$IfDef FPC}specialize{$EndIf} TArray<IbModelInstance>;
+  IbModelInstanceSet = {$IfDef FPC}specialize{$EndIf} IHashSet<IbModelInstance>;
+  TbModelInstanceSet = {$IfDef FPC}specialize{$EndIf} THashSet<IbModelInstance>;
 
   IbAnimationController = interface
     procedure SetTime(const ATime: Int64; const AIncomingEvents: IAnimationEventArr = nil);
@@ -168,11 +168,11 @@ type
     FMaterials: TavSBManaged;
 
     FInstBufferData: IModelInstanceVertexArr;
-    FInstBuffer: TavSB;
+    FInstBuffer: TavVB;
 
     FMaps: IMultiTextureMap;
 
-    FToDraw: IbModelArr;
+    FToDraw: IbModelInstanceArr;
     FDrawComparer: IComparer;
     FDrawChunks: IDrawChunkArr;
 
@@ -180,10 +180,11 @@ type
     function ObtainMultiTexture(const ASize: TVec2i): TavMultiTexture;
   public
     function CreateModel(const AMeshInstance: IbMeshInstance): IbModelInstance;
+    function CreateModels(const AMeshInstanceArr: IbMeshInstanceArr): IbModelInstanceArr;
 
     procedure SubmitBufferClear();
     procedure SubmitToDraw(const AModel: IbModelInstance); overload;
-    procedure SubmitToDraw(const AModelArr: IbModelArr); overload;
+    procedure SubmitToDraw(const AModelArr: IbModelInstanceArr); overload;
     procedure Draw();
 
     constructor Create(AOwner: TavObject); override;
@@ -191,7 +192,7 @@ type
   end;
 
 function Create_bAnimationController(const AModel: IbModelInstance): IbAnimationController; overload;
-function Create_bAnimationController(const AModels: IbModelArr): IbAnimationController; overload;
+function Create_bAnimationController(const AModels: IbModelInstanceArr): IbAnimationController; overload;
 
 implementation
 
@@ -223,7 +224,7 @@ type
     FArmature: IbArmature;
     FArmatureTransform: TMat4Arr;
 
-    FModels: IbModelArr;
+    FModels: IbModelInstanceArr;
 
     FPlayState : IAnimationPlayStateArr;
     FFrameState: array of TAnimationFrame;
@@ -242,18 +243,18 @@ type
     procedure StopBoneAnimation(AIndex: Integer; FadeSpeed: Integer = Default_FadeSpeed);
     procedure BoneAnimationSequence(const AAnimations: array of string; ALoopedLast: Boolean; GrowSpeed: Integer = Default_FadeSpeed; FadeSpeed: Integer = Default_FadeSpeed);
   public
-    constructor Create(const AModels: IbModelArr);
+    constructor Create(const AModels: IbModelInstanceArr);
   end;
 
 function Create_bAnimationController(const AModel: IbModelInstance): IbAnimationController;
-var models: IbModelArr;
+var models: IbModelInstanceArr;
 begin
-  models := TbModelArr.Create();
+  models := TbModelInstanceArr.Create();
   models.Add(AModel);
   Result := Create_bAnimationController(models);
 end;
 
-function Create_bAnimationController(const AModels: IbModelArr): IbAnimationController;
+function Create_bAnimationController(const AModels: IbModelInstanceArr): IbAnimationController;
 begin
   Result := TbAnimationController.Create(AModels);
 end;
@@ -504,7 +505,7 @@ begin
       FFrameState[i].frameIdx := animRange.y - 1
     else
     begin
-      FFrameState[i].frameIdx := frac( TimeToFrameFloat(max(FTime - ps.Start, 0)) / animRange.y) * animRange.y;
+      FFrameState[i].frameIdx := frac( TimeToFrameFloat(max(FTime - ps.Start, 0)) / (animRange.y-1)) * (animRange.y-1);
     end;
 
     if ps.FadeSpeed = 0 then
@@ -603,7 +604,7 @@ begin
   end;
 end;
 
-constructor TbAnimationController.Create(const AModels: IbModelArr);
+constructor TbAnimationController.Create(const AModels: IbModelInstanceArr);
   function CheckSameArmature(): Boolean;
   var i: Integer;
   begin
@@ -618,7 +619,7 @@ begin
   Assert(AModels[0].MeshInstnace.Armature <> nil);
 
   FPlayState := TAnimationPlayStateArr.Create();
-  FModels := AModels;
+  FModels := AModels.Clone();
   FArmature := FModels[0].MeshInstnace.Armature;
   SetLength(FArmatureTransform, FArmature.BonesCount);
 
@@ -631,8 +632,7 @@ end;
 
 class function TbModelColleciton.TModelInstanceVertex.Layout: IDataLayout;
 begin
-  Result := LB.Add('BoneOffset', ctInt, 1)
-              .Add('MaterialOffset', ctInt, 1)
+  Result := LB.Add('BoneOffset_MaterialOffset', ctInt, 2)
               .Finish();
 end;
 
@@ -692,7 +692,9 @@ begin
   FMeshInstance := AMeshInstance;
   FIdx := FOwner.FModelInstances.Add(Self);
   FModel := FOwner.ObtainModel(AMeshInstance.Mesh);
-  FBonesData := TBones.Create(AMeshInstance.TransformCount);
+  FBonesData := TBones.Create(AMeshInstance.TransformMatricesCount);
+  if FMeshInstance.Armature = nil then
+    FMeshInstance.FillNonArmaturedTransform(FBonesData.Matrices);
   FBns := AOwner.FBones.Add(FBonesData);
   FTexSize := AMeshInstance.Mesh.TexturesSize;
 end;
@@ -766,6 +768,17 @@ begin
   Result := TbModelInstance.Create(Self, AMeshInstance);
 end;
 
+function TbModelColleciton.CreateModels(const AMeshInstanceArr: IbMeshInstanceArr): IbModelInstanceArr;
+var
+  i: Integer;
+begin
+  Result := TbModelInstanceArr.Create();
+  if AMeshInstanceArr = nil then Exit;
+  Result.Capacity := AMeshInstanceArr.Count;
+  for i := 0 to AMeshInstanceArr.Count - 1 do
+    Result.Add(CreateModel(AMeshInstanceArr[i]));
+end;
+
 procedure TbModelColleciton.SubmitBufferClear();
 begin
   FToDraw.Clear();
@@ -776,7 +789,7 @@ begin
   FToDraw.Add(AModel);
 end;
 
-procedure TbModelColleciton.SubmitToDraw(const AModelArr: IbModelArr);
+procedure TbModelColleciton.SubmitToDraw(const AModelArr: IbModelInstanceArr);
 begin
   FToDraw.AddArray(AModelArr);
 end;
@@ -845,8 +858,7 @@ begin
   end;
 
   //draw
-  Main.ActiveProgram.SetAttributes(FVerts, FInds, nil);
-  Main.ActiveProgram.SetUniform('Instances', FInstBuffer);
+  Main.ActiveProgram.SetAttributes(FVerts, FInds, FInstBuffer);
   Main.ActiveProgram.SetUniform('Bones', FBones);
   Main.ActiveProgram.SetUniform('Materials', FMaterials);
   lastTexSize := Vec(0, 0);
@@ -876,12 +888,12 @@ begin
   FMaps      := TMultiTextureMap.Create();
 
   FInstBufferData := TModelInstanceVertexArr.Create();
-  FInstBuffer := TavSB.Create(Self);
+  FInstBuffer := TavVB.Create(Self);
   FInstBuffer.Vertices := FInstBufferData as IVerticesData;
 
   FInds.PrimType := ptTriangles;
 
-  FToDraw := TbModelArr.Create;
+  FToDraw := TbModelInstanceArr.Create;
   FDrawComparer := TDrawComparer.Create;
   FDrawChunks := TDrawChunkArr.Create;
 end;

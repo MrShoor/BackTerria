@@ -190,9 +190,10 @@ type
 
     function Mesh: IbMesh;
 
-    function TransformCount: Integer;
-    procedure EvalTransform(const AnimFrames: array of TAnimationFrame; var AMat: TMat4Arr);
+    function TransformMatricesCount: Integer;
+    procedure FillNonArmaturedTransform(const AMat: TMat4Arr);
     procedure RemapArmatureMatrices(const AArmatureMatrices: TMat4Arr; var AMat: TMat4Arr);
+    procedure BindArmature(const AArmature: IbArmature; const ABindTransform: TMat4);
 
     property Name: string read GetName;
     property Transform: TMat4 read GetTransform write SetTransform;
@@ -200,6 +201,10 @@ type
   end;
   IbMeshInstanceArr = {$IfDef FPC}specialize{$EndIf} IArray<IbMeshInstance>;
   TbMeshInstanceArr = {$IfDef FPC}specialize{$EndIf} TArray<IbMeshInstance>;
+  IbMeshInstanceSet = {$IfDef FPC}specialize{$EndIf} IHashSet<IbMeshInstance>;
+  TbMeshInstanceSet = {$IfDef FPC}specialize{$EndIf} THashSet<IbMeshInstance>;
+  IbMeshInstanceNameMap = {$IfDef FPC}specialize{$EndIf} IHashMap<string, IbMeshInstance>;
+  TbMeshInstanceNameMap = {$IfDef FPC}specialize{$EndIf} THashMap<string, IbMeshInstance>;
 
   TImportResult = record
     Armatures: IbArmatureArr;
@@ -331,11 +336,11 @@ type
     FName: string;
     FTransform: TMat4;
     FMesh: IbMesh;
+    FMeshVGroups: IVertexGroupArr;
     FArmature: IbArmature;
+    FArmatureBindTransform: TMat4;
 
     FVGroupToBoneIndex: TIntArr;
-
-    FTempBoneTransform: TMat4Arr;
   private
     function GetArmature: IbArmature;
     function GetName : string;
@@ -345,9 +350,10 @@ type
 
     function Mesh: IbMesh;
 
-    function TransformCount: Integer;
-    procedure EvalTransform(const AnimFrames: array of TAnimationFrame; var AMat: TMat4Arr);
+    function TransformMatricesCount: Integer;
+    procedure FillNonArmaturedTransform(const AMat: TMat4Arr);
     procedure RemapArmatureMatrices(const AArmatureMatrices: TMat4Arr; var AMat: TMat4Arr);
+    procedure BindArmature(const AArmature: IbArmature; const ABindTransform: TMat4);
   public
     constructor Create(AStream: TStream; const AMeshes: IbMeshArr; const AArms: IbArmatureArr);
   end;
@@ -484,18 +490,21 @@ end;
 
 procedure TbMeshInstance.SetArmature(const AValue: IbArmature);
 var i: Integer;
-    vGroups: IVertexGroupArr;
 begin
+  if FArmature = AValue then Exit;
   FArmature := AValue;
-  if FArmature = nil then Exit;
-  vGroups := FMesh.GetVertexGroups;
-  if vGroups.Count = 0 then Exit;
-  SetLength(FVGroupToBoneIndex, vGroups.Count);
+  if FArmature = nil then
+  begin
+    for i := 0 to Length(FVGroupToBoneIndex) - 1 do
+      FVGroupToBoneIndex[i] := -1;
+    Exit;
+  end;
+
   for i := 0 to Length(FVGroupToBoneIndex) - 1 do
   begin
-    FVGroupToBoneIndex[i] := FArmature.FindBone(vGroups[i]);
+    FVGroupToBoneIndex[i] := FArmature.FindBone(FMeshVGroups[i]);
     if FVGroupToBoneIndex[i] < 0 then
-      raise EMeshError.CreateFmt('Can''t bind "%s" vertex group to bone at mesh "%s" with armature "%s"', [vGroups[i], FMesh.Name, FArmature.Name]);
+      raise EMeshError.CreateFmt('Can''t bind "%s" vertex group to bone at mesh "%s" with armature "%s"', [FMeshVGroups[i], FMesh.Name, FArmature.Name]);
   end;
 end;
 
@@ -509,26 +518,17 @@ begin
   Result := FMesh;
 end;
 
-function TbMeshInstance.TransformCount: Integer;
+function TbMeshInstance.TransformMatricesCount: Integer;
 begin
-  Result := Max(1, FMesh.GetVertexGroups.Count);
+  Result := Max(1, FMeshVGroups.Count);
 end;
 
-procedure TbMeshInstance.EvalTransform(const AnimFrames: array of TAnimationFrame; var AMat: TMat4Arr);
-var
-  i: Integer;
+procedure TbMeshInstance.FillNonArmaturedTransform(const AMat: TMat4Arr);
+var i: Integer;
 begin
-  Assert(Length(AMat) = TransformCount);
-  if (Length(AnimFrames) = 0) or (FArmature = nil) then
-  begin
-    for i := 0 to Length(AMat) - 1 do
-      AMat[i] := FTransform;
-    Exit;
-  end;
-
-  FArmature.EvalTransform(AnimFrames, FTempBoneTransform);
-
-  RemapArmatureMatrices(FTempBoneTransform, AMat);
+  Assert(Length(AMat) = TransformMatricesCount);
+  for i := 0 to Length(AMat) - 1 do
+    AMat[i] := FTransform;
 end;
 
 procedure TbMeshInstance.RemapArmatureMatrices(const AArmatureMatrices: TMat4Arr; var AMat: TMat4Arr);
@@ -536,18 +536,31 @@ var
   i: Integer;
 begin
   for i := 0 to Length(FVGroupToBoneIndex) - 1 do
-    AMat[i] := AArmatureMatrices[FVGroupToBoneIndex[i]] * FTransform;
+    AMat[i] := FArmatureBindTransform * AArmatureMatrices[FVGroupToBoneIndex[i]] * FTransform;
+end;
+
+procedure TbMeshInstance.BindArmature(const AArmature: IbArmature; const ABindTransform: TMat4);
+begin
+  FArmatureBindTransform := ABindTransform;
+  SetArmature(AArmature);
 end;
 
 constructor TbMeshInstance.Create(AStream: TStream; const AMeshes: IbMeshArr; const AArms: IbArmatureArr);
-var idx: Integer;
+var idx, i: Integer;
 begin
   idx := 0;
   StreamReadString(AStream, FName);
   AStream.ReadBuffer(FTransform, SizeOf(FTransform));
   AStream.ReadBuffer(idx, SizeOf(idx));
+
   FMesh := AMeshes[idx];
+  FMeshVGroups := FMesh.GetVertexGroups;
+  SetLength(FVGroupToBoneIndex, FMeshVGroups.Count);
+  for i := 0 to Length(FVGroupToBoneIndex) - 1 do
+    FVGroupToBoneIndex[i] := -1;
+
   AStream.ReadBuffer(idx, SizeOf(idx));
+  AStream.ReadBuffer(FArmatureBindTransform, SizeOf(FArmatureBindTransform));
   if idx >= 0 then
     SetArmature(AArms[idx]);
 end;
@@ -747,6 +760,7 @@ begin
     t.x := 1.0 - t.y;
     t := t * af.weight;
     animIndices := anim.AffectedBones;
+
     for j := 0 to Length(animIndices) - 1 do
       AMat[animIndices[j]] := AMat[animIndices[j]] + anim.BoneTransform(j, frames.x)*t.x + anim.BoneTransform(j, frames.y)*t.y;
   end;
@@ -954,6 +968,7 @@ begin
     AStream.ReadBuffer(pMVert^.vsTex, SizeOf(pMVert^.vsTex));
 
     pMVert^.vsWIndex := Vec(0, -1, -1, -1);
+    pMVert^.vsWeight := Vec(1, 0, 0, 0);
     AStream.ReadBuffer(weight_count, SizeOf(weight_count));
     pWIndex := @pMVert^.vsWIndex;
     pWeight := @pMVert^.vsWeight;

@@ -8,26 +8,22 @@ struct VS_Input {
     float4 vsWeight  : vsWeight;
     int4   vsWIndex  : vsWIndex;
     int    vsMatIdx  : vsMatIdx;
-    uint   IID       : SV_InstanceID;
+    
+    int2 BoneOffset_MaterialOffset : BoneOffset_MaterialOffset; //instance data
 };
 
-struct InstanceData {
-    int BoneOffset;
-    int MaterialOffset;
-};
-
+#pragma pack_matrix( column_major )
 StructuredBuffer<float4x4> Bones;
-StructuredBuffer<InstanceData> Instances;
 
 struct VS_Output {
     float4 Pos      : SV_Position;
     float3 vCoord   : vCoord;
     float3 vNorm    : vNorm;
     float4 Tex      : Tex;
-    float  MatIndex : MatIndex;
+    nointerpolation float  MatIndex : MatIndex;
 };
 
-float4x4 GetBoneTransform(in float4 Indices, in float4 Weights) {
+float4x4 GetBoneTransform(in int4 Indices, in float4 Weights) {
     float4x4 m = {
         1, 0, 0, 0,
         0, 1, 0, 0,
@@ -38,15 +34,13 @@ float4x4 GetBoneTransform(in float4 Indices, in float4 Weights) {
     if (Indices.y>=0.0) m += Bones[Indices.y]*Weights.y;
     if (Indices.z>=0.0) m += Bones[Indices.z]*Weights.z;
     if (Indices.w>=0.0) m += Bones[Indices.w]*Weights.w;
-    return m;
+    return transpose(m);
 }
 
 VS_Output VS(VS_Input In) {
     VS_Output Out;
     
-    InstanceData idata = Instances[In.IID];
-    
-    float4x4 objTransform = GetBoneTransform(In.vsWIndex + float(idata.BoneOffset), In.vsWeight);
+    float4x4 objTransform = GetBoneTransform(In.vsWIndex + In.BoneOffset_MaterialOffset.x, In.vsWeight);
     float4 crd = mul(float4(In.vsCoord, 1.0), objTransform);
     float3 norm = mul(In.vsNormal, (float3x3)objTransform);
     
@@ -54,7 +48,7 @@ VS_Output VS(VS_Input In) {
     Out.vCoord = mul(crd, V_Matrix).xyz;
     Out.vNorm = mul(norm, (float3x3)V_Matrix);
     Out.Tex = In.vsTex;
-    Out.MatIndex = float(idata.MaterialOffset) + In.vsMatIdx;
+    Out.MatIndex = In.BoneOffset_MaterialOffset.y + In.vsMatIdx;
     return Out;
 }
 
