@@ -22,7 +22,12 @@ type
     function Matrices: TMat4Arr;
   end;
 
+  { IbModelInstance }
+
   IbModelInstance = interface
+    function GetTransform: TMat4;
+    procedure SetTransform(const AValue: TMat4);
+
     procedure GetModelHandles(out vert     : IVBManagedHandle;
                               out ind      : IIBManagedHandle);
     procedure GetBonesOffset(out ABonesOffset: Integer);
@@ -33,6 +38,8 @@ type
     function MeshInstnace: IbMeshInstance;
 
     procedure InvalidateBonesData;
+
+    property Transform: TMat4 read GetTransform write SetTransform;
   end;
   IbModelInstanceArr = {$IfDef FPC}specialize{$EndIf} IArray<IbModelInstance>;
   TbModelInstanceArr = {$IfDef FPC}specialize{$EndIf} TArray<IbModelInstance>;
@@ -118,6 +125,10 @@ type
 
       FBns  : ISBManagedHandle;
       FBonesData: IBones;
+
+      function GetTransform: TMat4;
+      procedure SetTransform(const AValue: TMat4);
+
       procedure GetModelHandles(out vert: IVBManagedHandle; out ind: IIBManagedHandle);
       procedure GetBonesOffset(out ABonesOffset: Integer);
       procedure GetMaterialsOffset(out AMaterialsOffset: Integer);
@@ -637,6 +648,21 @@ begin
 end;
 
 { TbModelColleciton.TbModelInstance }
+
+function TbModelColleciton.TbModelInstance.GetTransform: TMat4;
+begin
+  Result := FMeshInstance.Transform;
+end;
+
+procedure TbModelColleciton.TbModelInstance.SetTransform(const AValue: TMat4);
+begin
+  FMeshInstance.Transform := AValue;
+  if FMeshInstance.Armature = nil then
+  begin
+    FMeshInstance.FillNonArmaturedTransform(FBonesData.Matrices);
+    InvalidateBonesData;
+  end;
+end;
 
 procedure TbModelColleciton.TbModelInstance.GetModelHandles(out vert: IVBManagedHandle; out ind: IIBManagedHandle);
 begin
