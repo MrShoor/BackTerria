@@ -27,6 +27,7 @@ type
     FModelCollection: TbModelColleciton;
 
     FModels: IbModelInstanceArr;
+    FBow   : IbModelInstance;
     FAnim : IbAnimationController;
 
     FImportRes: TImportResult;
@@ -56,7 +57,7 @@ procedure TfrmMain.FormCreate(Sender: TObject);
   var
     i: Integer;
   begin
-    FImportRes := bMesh_LoadFromFile('D:\test\out.dat');
+    FImportRes := bMesh_LoadFromFile('D:\test\out.bmesh');
     FImportRes.Meshes[meshIdx].ApplyMorphFrameLerp(2);
 
     FImportedMeshes := TbMeshInstanceNameMap.Create();
@@ -77,14 +78,18 @@ begin
 
   ImportModel;
 
-  //FModels := FModelCollection.CreateModels(FindMeshes(['arissa:Body_Geo', 'arissa:Cloak_Geo', 'arissa:Eyes', 'arissa:Skirt_Geo', 'arissa:Weapons_Geo']));
-  FModels := FModelCollection.CreateModels(FindMeshes(['Stick']));
+  FModels := FModelCollection.CreateModels(FindMeshes(['arissa:Body_Geo', 'arissa:Cloak_Geo', 'arissa:Eyes', 'arissa:Skirt_Geo', 'arissa:Weapons_Geo']));
+  //FModels := FModelCollection.CreateModels(FindMeshes(['arissa:Body_Geo']));
+  FBow := FModelCollection.CreateModels(FindMeshes(['Hunters_Bow']))[0];
+  FBow.MeshInstnace.BindArmature(FModels[0].MeshInstnace.Armature);
+  FModels.Add(FBow);
+  //FModels := FModelCollection.CreateModels(FindMeshes(['Stick']));
   FAnim := Create_bAnimationController(FModels);
   FAnim.SetTime(FMain.Time64);
-  FModels.AddArray(FModelCollection.CreateModels(FindMeshes(['Cube'])));
+  //FModels.AddArray(FModelCollection.CreateModels(FindMeshes(['Cube'])));
 
-  //FAnim.BoneAnimationSequence(['Hunter_Raise0'], True);
-  FAnim.BoneAnimationSequence(['StickArmAction'], True);
+  FAnim.BoneAnimationSequence(['Hunter_Raise0'], True);
+  //FAnim.BoneAnimationSequence(['StickArmAction'], True);
   FEvents := TAnimationEventArr.Create();
 
   FMain.Projection.Fov := Pi*0.25;

@@ -138,6 +138,7 @@ PS_Output PS(VS_Output In) {
     
     Out.Color = mat.Diffuse_Color(In.Tex.xy);
     Out.Color.xyz *= mult;
+    //Out.Color.xyz = float3(1,0,0);
     Out.Color.w = 1.0;
     return Out;
 }

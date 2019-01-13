@@ -162,6 +162,7 @@ type
 
   IbArmature = interface
     function GetName : string;
+    function DefaultBindTransform: TMat4;
 
     function BonesCount: Integer;
     function BoneName(AIndex: Integer): string;
@@ -193,7 +194,8 @@ type
     function TransformMatricesCount: Integer;
     procedure FillNonArmaturedTransform(const AMat: TMat4Arr);
     procedure RemapArmatureMatrices(const AArmatureMatrices: TMat4Arr; var AMat: TMat4Arr);
-    procedure BindArmature(const AArmature: IbArmature; const ABindTransform: TMat4);
+    procedure BindArmature(const AArmature: IbArmature); overload;
+    procedure BindArmature(const AArmature: IbArmature; const ABindTransform: TMat4); overload;
 
     property Name: string read GetName;
     property Transform: TMat4 read GetTransform write SetTransform;
@@ -302,6 +304,7 @@ type
     end;
   private
     FName: string;
+    FDefaultBindTransform: TMat4;
     FBoneNames : array of string;
     FParents   : TIntArr;
     FTransforms: TMat4Arr;
@@ -313,6 +316,7 @@ type
     FTempFlags: array of Boolean;
   private
     function GetName : string;
+    function DefaultBindTransform: TMat4;
 
     function BonesCount: Integer;
     function BoneName(AIndex: Integer): string;
@@ -353,7 +357,8 @@ type
     function TransformMatricesCount: Integer;
     procedure FillNonArmaturedTransform(const AMat: TMat4Arr);
     procedure RemapArmatureMatrices(const AArmatureMatrices: TMat4Arr; var AMat: TMat4Arr);
-    procedure BindArmature(const AArmature: IbArmature; const ABindTransform: TMat4);
+    procedure BindArmature(const AArmature: IbArmature); overload;
+    procedure BindArmature(const AArmature: IbArmature; const ABindTransform: TMat4); overload;
   public
     constructor Create(AStream: TStream; const AMeshes: IbMeshArr; const AArms: IbArmatureArr);
   end;
@@ -539,6 +544,11 @@ begin
     AMat[i] := FArmatureBindTransform * AArmatureMatrices[FVGroupToBoneIndex[i]] * FTransform;
 end;
 
+procedure TbMeshInstance.BindArmature(const AArmature: IbArmature);
+begin
+  BindArmature(AArmature, AArmature.DefaultBindTransform);
+end;
+
 procedure TbMeshInstance.BindArmature(const AArmature: IbArmature; const ABindTransform: TMat4);
 begin
   FArmatureBindTransform := ABindTransform;
@@ -669,6 +679,11 @@ begin
   Result := FName;
 end;
 
+function TbArmature.DefaultBindTransform: TMat4;
+begin
+  Result := FDefaultBindTransform;
+end;
+
 function TbArmature.BonesCount: Integer;
 begin
   Result := Length(FTransforms);
@@ -793,6 +808,8 @@ begin
   anim_count := 0;
 
   StreamReadString(AStream, FName);
+  AStream.ReadBuffer(FDefaultBindTransform, SizeOf(FDefaultBindTransform));
+
   AStream.ReadBuffer(bones_count, SizeOf(bones_count));
   Assert(bones_count > 0);
 
